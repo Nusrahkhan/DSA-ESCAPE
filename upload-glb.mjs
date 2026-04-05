@@ -10,7 +10,7 @@ const files = [
 
 for (const file of files) {
   const data = readFileSync(`C:\\Users\\HOME\\escape\\static\\${file}`);
-    const blob = await put(file, data, { access: 'private', allowOverwrite: true });
+    const blob = await put(file, data, { access: 'public', allowOverwrite: true });
   console.log(`✅ ${file} → ${blob.url}`);
   // saves each URL to a file as it uploads
   appendFileSync('blob-urls.txt', `${file} → ${blob.url}\n`);
