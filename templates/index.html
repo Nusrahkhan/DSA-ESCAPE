@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>DSA Escape Room</title>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --cream:  #F2F3F4;
+      --sand:   #DED1C6;
+      --mauve:  #A77693;
+      --navy:   #174871;
+      --deep:   #080f1a;
+      --deep2:  #0a1628;
+      --glass:  #ffffff08;
+      --glass-border: #ffffff12;
+      --glow-mauve: 0 0 18px #A7769344, 0 0 40px #A7769322;
+    }
+
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: var(--deep);
+      font-family: 'Share Tech Mono', monospace;
+      color: var(--cream);
+      cursor: none;
+    }
+
+    /* ── Custom cursor ── */
+    #cursor {
+      position: fixed;
+      width: 10px; height: 10px;
+      background: var(--mauve);
+      border-radius: 50%;
+      pointer-events: none;
+      transform: translate(-50%, -50%);
+      z-index: 99999;
+      box-shadow: 0 0 10px #A77693dd, 0 0 24px #A7769344;
+      transition: width .12s, height .12s, background .12s;
+    }
+    #cursor.big { width: 16px; height: 16px; background: var(--sand); box-shadow: 0 0 14px #DED1C6cc; }
+
+    /* ── Deep space background ── */
+    body {
+      background:
+        radial-gradient(ellipse 80% 60% at 50% 100%, #0d2547 0%, transparent 60%),
+        radial-gradient(ellipse 40% 30% at 10% 15%, #A7769318 0%, transparent 55%),
+        radial-gradient(ellipse 35% 28% at 92% 88%, #17487122 0%, transparent 50%),
+        radial-gradient(ellipse 60% 40% at 50% 50%, #0a1628 0%, transparent 80%),
+        linear-gradient(160deg, #060d18 0%, #080f1a 50%, #060d18 100%);
+    }
+
+    /* ── Nebula blobs ── */
+    .nebula { position: fixed; border-radius: 50%; pointer-events: none; z-index: 0; filter: blur(80px); animation: nebPulse 8s ease-in-out infinite alternate; }
+    .nebula-1 { width: 500px; height: 300px; background: radial-gradient(ellipse, #A7769318, transparent 70%); top: 10%; left: -5%; }
+    .nebula-2 { width: 400px; height: 400px; background: radial-gradient(ellipse, #17487128, transparent 70%); bottom: 5%; right: 0%; animation-delay: -4s; }
+    .nebula-3 { width: 300px; height: 200px; background: radial-gradient(ellipse, #DED1C60e, transparent 70%); top: 30%; right: 15%; animation-delay: -2s; }
+    @keyframes nebPulse { 0% { opacity: .5; transform: scale(1); } 100% { opacity: 1; transform: scale(1.15); } }
+
+    /* ── Star field canvas ── */
+    #stars { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+
+    /* ── 3-D perspective stage / grid floor ── */
+    #scene {
+      position: fixed; inset: 0; z-index: 1;
+      perspective: 700px;
+      perspective-origin: 50% 100%;
+    }
+    #grid {
+      position: absolute; inset: 0;
+      transform: rotateX(72deg) translateY(45%) translateZ(-40px);
+      background-image:
+        linear-gradient(#A7769318 1px, transparent 1px),
+        linear-gradient(90deg, #17487130 1px, transparent 1px);
+      background-size: 60px 60px;
+      animation: gridScroll 6s linear infinite;
+      mask-image: radial-gradient(ellipse 90% 80% at 50% 100%, black 30%, transparent 75%);
+    }
+    @keyframes gridScroll { from { background-position: 0 0; } to { background-position: 0 60px; } }
+
+    /* ── Binary rain canvas ── */
+    #canvas-bg {
+      position: fixed; inset: 0; z-index: 2;
+      opacity: .08;
+      pointer-events: none;
+    }
+
+    /* ── Scanlines ── */
+    #scanlines {
+      position: fixed; inset: 0; pointer-events: none; z-index: 12;
+      background: repeating-linear-gradient(
+        0deg, transparent, transparent 2px,
+        #00000018 2px, #00000018 3px
+      );
+    }
+
+    /* ── Vignette ── */
+    #vignette {
+      position: fixed; inset: 0; z-index: 14; pointer-events: none;
+      background: radial-gradient(ellipse 100% 100% at 50% 50%, transparent 50%, #06091200 60%, #060912aa 100%);
+    }
+
+    /* ── Floating code particles ── */
+    .particle {
+      position: fixed;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 9px;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 3;
+      animation: floatUp var(--dur) linear infinite var(--delay);
+      left: var(--px);
+    }
+    @keyframes floatUp {
+      0%   { transform: translateY(110vh); opacity: 0; }
+      8%   { opacity: .3; }
+      88%  { opacity: .1; }
+      100% { transform: translateY(-8vh);  opacity: 0; }
+    }
+
+    /* ── HUD top bar ── */
+    #hud {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 50;
+      padding: 16px 36px;
+      display: flex; align-items: center; justify-content: space-between;
+      border-bottom: 1px solid #ffffff0a;
+      background: linear-gradient(180deg, #060912ee 0%, #06091200 100%);
+      backdrop-filter: blur(12px);
+    }
+    .hud-logo {
+      font-family: 'Orbitron', sans-serif;
+      font-size: .88rem; font-weight: 900;
+      letter-spacing: .25em; color: var(--cream);
+      display: flex; align-items: center; gap: 10px;
+    }
+    .hud-logo::before {
+      content: ''; width: 6px; height: 6px;
+      background: var(--mauve); border-radius: 50%;
+      box-shadow: 0 0 8px var(--mauve);
+      animation: blink 2s step-end infinite;
+    }
+    .hud-logo span { color: var(--mauve); }
+    .hud-right { font-size: .58rem; letter-spacing: .3em; color: #ffffff22; animation: blink 3.5s step-end infinite; }
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: .2; } }
+
+    /* corner brackets */
+    .corner { position: fixed; width: 40px; height: 40px; pointer-events: none; z-index: 30; }
+    .corner::before, .corner::after { content: ''; position: absolute; background: #17487155; }
+    .corner::before { width: 100%; height: 1px; top: 0; }
+    .corner::after  { width: 1px; height: 100%; left: 0; }
+    .corner.tl { top: 16px; left: 16px; }
+    .corner.tr { top: 16px; right: 16px; transform: scaleX(-1); }
+    .corner.bl { bottom: 16px; left: 16px; transform: scaleY(-1); }
+    .corner.br { bottom: 16px; right: 16px; transform: scale(-1); }
+
+    /* ── Main content ── */
+    #content {
+      position: fixed; inset: 0; z-index: 20;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      transition: transform .08s ease-out;
+    }
+
+    .badge {
+      font-size: .67rem;
+      letter-spacing: .38em;
+      color: var(--sand);
+      opacity: 0;
+      animation: fadeSlide .8s .3s forwards;
+      border: 1px solid #DED1C628;
+      padding: 5px 20px;
+      background: #DED1C606;
+      margin-bottom: 22px;
+      text-transform: uppercase;
+    }
+
+    .main-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: clamp(2.8rem, 7.5vw, 6.5rem);
+      font-weight: 900;
+      line-height: 1.05;
+      text-align: center;
+      position: relative;
+      opacity: 0;
+      animation: fadeSlide .9s .6s forwards;
+    }
+    .main-title .word-dsa    { display: block; color: var(--cream); letter-spacing: .14em; }
+    .main-title .word-escape { display: block; color: var(--sand);  font-size: .86em; letter-spacing: .09em; }
+    .main-title .word-room   { display: block; color: var(--mauve); letter-spacing: .16em; text-shadow: var(--glow-mauve); }
+
+    /* subtle glitch */
+    .main-title::before {
+      content: attr(data-text);
+      position: absolute; inset: 0;
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 900; font-size: inherit;
+      line-height: 1.05; text-align: center;
+      color: var(--mauve);
+      clip-path: polygon(0 30%, 100% 30%, 100% 48%, 0 48%);
+      animation: glitch1 7s infinite;
+      opacity: .14;
+      pointer-events: none;
+    }
+    @keyframes glitch1 {
+      0%, 93%, 100% { transform: translate(0); }
+      94% { transform: translate(-3px, 1px); }
+      97% { transform: translate(3px, -1px); }
+    }
+
+    .holo-sub {
+      font-size: .64rem;
+      letter-spacing: .46em;
+      color: #A7769366;
+      text-transform: uppercase;
+      margin-top: 10px;
+      opacity: 0;
+      animation: fadeSlide .8s .9s forwards;
+    }
+
+    .divider {
+      width: 280px; height: 1px;
+      background: linear-gradient(90deg, transparent, #17487188, #A7769866, #17487188, transparent);
+      margin: 26px auto;
+      opacity: 0;
+      animation: fadeSlide .8s 1s forwards;
+    }
+
+    .tagline {
+      font-size: clamp(.8rem, 1.9vw, 1.02rem);
+      color: var(--sand);
+      text-align: center;
+      letter-spacing: .13em;
+      max-width: 600px;
+      line-height: 1.9;
+      opacity: 0;
+      animation: fadeSlide .9s 1.2s forwards;
+      padding: 0 24px;
+    }
+    .tagline em {
+      color: var(--cream);
+      font-style: normal;
+      border-bottom: 1px solid #A7769348;
+      padding-bottom: 1px;
+    }
+
+    .enter-btn {
+      margin-top: 36px;
+      position: relative;
+      padding: 16px 58px;
+      font-family: 'Orbitron', sans-serif;
+      font-size: .92rem;
+      font-weight: 700;
+      letter-spacing: .24em;
+      text-transform: uppercase;
+      color: #080f1a;
+      background: var(--mauve);
+      border: none;
+      outline: none;
+      cursor: none;
+      clip-path: polygon(12px 0%, 100% 0%, calc(100% - 12px) 100%, 0% 100%);
+      transition: transform .18s, filter .18s;
+      opacity: 0;
+      animation: fadeSlide .9s 1.5s forwards;
+      overflow: hidden;
+      box-shadow: 0 4px 32px #A7769355, 0 0 0 1px #A7769380;
+      filter: brightness(1);
+    }
+    .enter-btn::before {
+      content: '';
+      position: absolute;
+      top: 0; left: -75%;
+      width: 50%; height: 100%;
+      background: linear-gradient(90deg, transparent, #ffffff40, transparent);
+      transform: skewX(-20deg);
+      animation: shimmer 3.5s ease-in-out infinite;
+      pointer-events: none;
+    }
+    .enter-btn::after {
+      content: '';
+      position: absolute; inset: 0;
+      background: linear-gradient(135deg, #DED1C622 0%, transparent 60%);
+      pointer-events: none;
+    }
+    @keyframes shimmer {
+      0%   { left: -75%; opacity: 0; }
+      30%  { opacity: 1; }
+      60%  { left: 135%; opacity: 0; }
+      100% { left: 135%; opacity: 0; }
+    }
+    .enter-btn:hover  { transform: scale(1.06) translateY(-2px); filter: brightness(1.15); box-shadow: 0 8px 40px #A7769370, 0 0 0 1.5px #A77693; }
+    .enter-btn:active { transform: scale(.97); filter: brightness(.95); }
+
+    /* status bar */
+    .status-bar {
+      position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+      font-size: .58rem; letter-spacing: .3em; white-space: nowrap;
+      color: #17487155; z-index: 30;
+      animation: blink 3.5s step-end infinite;
+    }
+
+    @keyframes fadeSlide {
+      from { opacity: 0; transform: translateY(14px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+
+<div id="cursor"></div>
+<div id="scanlines"></div>
+<div id="vignette"></div>
+
+<!-- Nebula blobs -->
+<div class="nebula nebula-1"></div>
+<div class="nebula nebula-2"></div>
+<div class="nebula nebula-3"></div>
+
+<!-- Star field -->
+<canvas id="stars"></canvas>
+
+<!-- Grid floor -->
+<div id="scene"><div id="grid"></div></div>
+
+<!-- Binary rain -->
+<canvas id="canvas-bg"></canvas>
+
+<!-- Corner brackets -->
+<div class="corner tl"></div>
+<div class="corner tr"></div>
+<div class="corner bl"></div>
+<div class="corner br"></div>
+
+<!-- HUD -->
+<div id="hud">
+  <div class="hud-logo">DSA <span>ESCAPE</span> ROOM</div>
+  <div class="hud-right">[ SYSTEM READY — INITIATING SEQUENCE ]</div>
+</div>
+
+<div class="status-bar">[ SYSTEM READY — INITIATING SEQUENCE ]</div>
+
+<div id="content">
+  <div class="badge">// Data Structure Alert — Level: INFINITE //</div>
+
+  <h1 class="main-title" data-text="DSA ESCAPE ROOM">
+    <span class="word-dsa">DSA</span>
+    <span class="word-escape">ESCAPE</span>
+    <span class="word-room">ROOM</span>
+  </h1>
+  <div class="holo-sub">[ v2.0.47 — NEURAL CORE ACTIVE ]</div>
+
+  <div class="divider"></div>
+
+  <p class="tagline">
+    Trapped in the <em>Matrix of Algorithms</em>.<br/>
+    Sort your way out. Traverse the unknown.<br/>
+    <em>Only the Optimal survive.</em>
+  </p>
+
+  <button class="enter-btn" id="enterBtn">⟶ &nbsp;ENTER THE LOOP</button>
+</div>
+
+<script>
+/* ─── Cursor ─── */
+const cur = document.getElementById('cursor');
+
+document.addEventListener('mousemove', e => {
+  cur.style.left = e.clientX + 'px';
+  cur.style.top  = e.clientY + 'px';
+});
+
+document.querySelectorAll('button, a').forEach(el => {
+  el.addEventListener('mouseenter', () => cur.classList.add('big'));
+  el.addEventListener('mouseleave', () => cur.classList.remove('big'));
+});
+
+/* ─── Star field ─── */
+(function () {
+  const c = document.getElementById('stars');
+  const ctx = c.getContext('2d');
+  let stars = [];
+  function init() {
+    c.width = innerWidth; c.height = innerHeight;
+    stars = Array.from({ length: 180 }, () => ({
+      x: Math.random() * c.width,
+      y: Math.random() * c.height,
+      r: Math.random() * .9 + .2,
+      a: Math.random(),
+      speed: Math.random() * .003 + .001
+    }));
+  }
+  function draw() {
+    ctx.clearRect(0, 0, c.width, c.height);
+    stars.forEach(s => {
+      s.a += s.speed; if (s.a > 1) s.a = 0;
+      const alpha = Math.sin(s.a * Math.PI);
+      ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255,255,255,${alpha * .5})`; ctx.fill();
+    });
+    requestAnimationFrame(draw);
+  }
+  init(); window.addEventListener('resize', init); draw();
+})();
+
+/* ─── Binary rain ─── */
+const canvas = document.getElementById('canvas-bg');
+const ctx = canvas.getContext('2d');
+let W, H, drops;
+const chars = '01ABCDEFGHIJKLMNOPQRSTUVWXYZ→←↑↓∞∑∫√{}[]<>=';
+function initCanvas() {
+  W = canvas.width  = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  const cols = Math.floor(W / 18);
+  drops = Array(cols).fill(0).map(() => Math.random() * H / 18);
+}
+function drawRain() {
+  ctx.fillStyle = 'rgba(8,15,26,.12)';
+  ctx.fillRect(0, 0, W, H);
+  ctx.font = '10px "Share Tech Mono"';
+  drops.forEach((y, i) => {
+    const c2 = chars[Math.floor(Math.random() * chars.length)];
+    const p = Math.random();
+    ctx.fillStyle = p > .96 ? '#DED1C6' : p > .88 ? '#A77693' : '#174871';
+    ctx.fillText(c2, i * 18, y * 18);
+    if (y * 18 > H && Math.random() > .977) drops[i] = 0;
+    drops[i] += .3 + Math.random() * .35;
+  });
+}
+initCanvas();
+window.addEventListener('resize', initCanvas);
+setInterval(drawRain, 46);
+
+/* ─── Floating code particles ─── */
+const snippets = [
+  'O(log n)', 'BFS()', 'DFS()', 'push()', 'pop()', 'O(1)',
+  'heap[]', 'sort()', 'null', 'root', 'left', 'right',
+  'merge', 'stack', 'queue', 'hash{}', 'O(n²)', '→', '∞',
+  '{}', '[]', '//', '<=', '>=', 'ptr', 'node',
+];
+const pcols = ['#DED1C640', '#A7769340', '#17487160'];
+for (let i = 0; i < 20; i++) {
+  const p = document.createElement('div');
+  p.className = 'particle';
+  p.textContent = snippets[i % snippets.length];
+  p.style.cssText = `
+    --dur:${9 + Math.random() * 9}s;
+    --delay:-${Math.random() * 14}s;
+    --px:${Math.random() * 100}vw;
+    color:${pcols[Math.floor(Math.random() * pcols.length)]};
+  `;
+  document.body.appendChild(p);
+}
+
+/* ─── Subtle 3-D parallax tilt ─── */
+const content = document.getElementById('content');
+document.addEventListener('mousemove', e => {
+  const cx = innerWidth / 2, cy = innerHeight / 2;
+  const rotX = ((e.clientY - cy) / cy) * -3.5;
+  const rotY = ((e.clientX - cx) / cx) * 3.5;
+  content.style.transform = `perspective(1200px) rotateX(${rotX}deg) rotateY(${rotY}deg)`;
+});
+document.addEventListener('mouseleave', () => {
+  content.style.transform = 'perspective(1200px) rotateX(0) rotateY(0)';
+});
+
+/* ─── Enter button ─── */
+document.getElementById('enterBtn').addEventListener('click', () => {
+  document.body.style.transition = 'opacity .7s';
+  document.body.style.opacity = '0';
+  setTimeout(() => {
+    window.location.href = '/level';
+  }, 700);
+});
+</script>
+</body>
+</html>

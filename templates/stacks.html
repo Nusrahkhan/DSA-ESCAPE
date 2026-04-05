@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Stack Escape Room</title>
+  <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap');
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Share Tech Mono', monospace; background: #000; overflow: hidden; }
+
+    /* ── HUD ── */
+    #hud { position: fixed; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; align-items: center; padding: 16px 28px; background: linear-gradient(180deg, rgba(0,0,0,0.88) 0%, transparent 100%); z-index: 100; pointer-events: none; }
+    #hud-title { font-family: 'Orbitron', monospace; font-size: 1.1rem; font-weight: 900; color: #00e5ff; letter-spacing: 3px; text-shadow: 0 0 20px #00e5ff88; }
+    #hud-right { display: flex; gap: 24px; align-items: center; }
+    .hud-badge { font-size: 0.75rem; color: #80f0ff; letter-spacing: 2px; border: 1px solid #00e5ff44; padding: 6px 14px; border-radius: 2px; background: rgba(0,229,255,0.06); }
+    #room-name-badge { font-family: 'Orbitron', monospace; color: #00ffcc; border-color: #00ffcc44; background: rgba(0,255,204,0.06); text-shadow: 0 0 10px #00ffcc66; }
+    #puzzle-timer { font-family: 'Orbitron', monospace; }
+
+
+    /* ── Puzzle Modal ── */
+    #puzzle-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.96); z-index: 200; justify-content: center; align-items: center; }
+    #puzzle-modal.open { display: flex; }
+    #monitor-assembly { display: flex; flex-direction: column; align-items: center; animation: monitorPowerOn 0.4s ease; }
+    @keyframes monitorPowerOn { 0% { opacity:0; transform:scale(0.94) translateY(20px); filter:brightness(3); } 60% { opacity:1; filter:brightness(1.3); } 100% { transform:scale(1) translateY(0); filter:brightness(1); } }
+    #monitor-bezel { background: linear-gradient(160deg, #081820 0%, #051015 40%, #030a10 100%); border-radius: 12px 12px 4px 4px; padding: 18px 18px 22px; box-shadow: 0 0 0 1px #002233, 0 0 0 2px #004455, 4px 4px 20px rgba(0,0,0,0.8), inset 0 1px 0 rgba(0,200,255,0.08), inset 0 -2px 6px rgba(0,0,0,0.6); width: min(760px, 94vw); position: relative; }
+    #monitor-bezel::after { content: ''; position: absolute; bottom: 10px; right: 22px; width: 7px; height: 7px; border-radius: 50%; background: #00e5ff; box-shadow: 0 0 6px #00e5ff, 0 0 12px #00e5ff66; animation: ledBlink 3s ease-in-out infinite; }
+    @keyframes ledBlink { 0%,90%,100% { opacity:1; } 95% { opacity:0.3; } }
+    #monitor-brand { position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); font-family: 'Orbitron', monospace; font-size: 0.55rem; color: #0a2233; letter-spacing: 4px; }
+    #monitor-screen { background: #000d14; border-radius: 4px; overflow: hidden; position: relative; border: 2px solid #002233; box-shadow: inset 0 0 60px rgba(0,30,50,0.9), inset 0 0 120px rgba(0,229,255,0.03), 0 0 30px rgba(0,229,255,0.08); }
+    #monitor-screen::before { content: ''; position: absolute; inset: 0; z-index: 100; pointer-events: none; background: repeating-linear-gradient(0deg, transparent 0px, transparent 2px, rgba(0,0,0,0.18) 2px, rgba(0,0,0,0.18) 3px); }
+    #monitor-screen::after { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 35%; z-index: 101; pointer-events: none; background: linear-gradient(180deg, rgba(0,200,255,0.04) 0%, rgba(255,255,255,0.01) 50%, transparent 100%); border-radius: 4px 4px 0 0; }
+    #screen-titlebar { background: linear-gradient(90deg, #040e18 0%, #071828 50%, #040e18 100%); border-bottom: 1px solid #00e5ff22; padding: 0; display: flex; align-items: stretch; height: 36px; position: relative; z-index: 10; }
+    #titlebar-dots { display: flex; align-items: center; gap: 7px; padding: 0 14px; border-right: 1px solid #00e5ff11; }
+    .tb-dot { width: 12px; height: 12px; border-radius: 50%; cursor: pointer; transition: filter 0.15s; }
+    .tb-dot:hover { filter: brightness(1.3); }
+    .tb-dot.red    { background: radial-gradient(circle at 35% 35%, #ff7070, #cc3333); box-shadow: 0 0 4px #cc333366; }
+    .tb-dot.yellow { background: radial-gradient(circle at 35% 35%, #ffdd70, #ccaa00); box-shadow: 0 0 4px #ccaa0066; }
+    .tb-dot.green  { background: radial-gradient(circle at 35% 35%, #70ff99, #00aa44); box-shadow: 0 0 4px #00aa4466; }
+    #titlebar-name { flex:1; display:flex; align-items:center; justify-content:center; font-size:0.65rem; color:#1a4455; letter-spacing:2px; }
+    #titlebar-name span { color: #0088aa; }
+    #titlebar-right { display:flex; align-items:center; padding:0 12px; gap:10px; border-left:1px solid #00e5ff11; font-size:0.6rem; color:#103040; }
+    #screen-content { padding: 20px 24px 24px; max-height: calc(80vh - 36px); overflow-y: auto; position: relative; z-index: 10; color: #ccf4ff; }
+    #screen-content::-webkit-scrollbar { width: 6px; }
+    #screen-content::-webkit-scrollbar-track { background: #000d14; }
+    #screen-content::-webkit-scrollbar-thumb { background: #00e5ff33; border-radius: 3px; }
+    .puzzle-tag { font-size:0.6rem; letter-spacing:4px; color:#00e5ff88; margin-bottom:10px; display:flex; align-items:center; gap:6px; }
+    .puzzle-tag::before { content:'▸▸'; color:#00e5ff44; }
+    #puzzle-title { font-family:'Orbitron',monospace; font-size:1.2rem; font-weight:700; color:#e0f8ff; margin-bottom:6px; line-height:1.3; text-shadow:0 0 20px rgba(0,200,255,0.2); }
+    #puzzle-difficulty { font-size:0.68rem; letter-spacing:2px; margin-bottom:18px; }
+    .diff-easy   { color:#00ff99; text-shadow:0 0 8px #00ff9944; }
+    .diff-medium { color:#ffaa00; text-shadow:0 0 8px #ffaa0044; }
+    .diff-hard   { color:#00e5ff; text-shadow:0 0 8px #00e5ff44; }
+    .screen-divider { border:none; border-top:1px solid #00e5ff18; margin:0 0 16px 0; }
+    #puzzle-description { color:#4ab8d0; font-size:0.84rem; line-height:1.75; margin-bottom:16px; padding:10px 12px; background:rgba(0,229,255,0.025); border-left:2px solid #00e5ff33; border-radius:0 3px 3px 0; }
+    #puzzle-code-block { background:#000a10; border:1px solid #001a22; border-top:2px solid #00e5ff22; border-radius:3px; padding:14px 16px; margin-bottom:16px; font-size:0.8rem; color:#55ccee; white-space:pre; overflow-x:auto; line-height:1.65; position:relative; }
+    #puzzle-code-block::before { content:'CODE'; position:absolute; top:-9px; left:10px; background:#000a10; padding:0 6px; font-size:0.52rem; color:#00e5ff44; letter-spacing:3px; }
+    #hint-btn { background:none; border:1px solid #ffcc0022; color:#ffcc0044; font-family:'Share Tech Mono',monospace; font-size:0.68rem; letter-spacing:2px; padding:6px 14px; cursor:pointer; border-radius:2px; margin-bottom:14px; transition:all 0.2s; display:block; }
+    #hint-btn:hover { border-color:#ffcc00aa; color:#ffcc00; background:rgba(255,204,0,0.05); }
+    #hint-text { display:none; color:#ffcc0099; font-size:0.76rem; margin-bottom:14px; padding:8px 12px; background:rgba(255,204,0,0.04); border-left:2px solid #ffcc0033; border-radius:0 3px 3px 0; }
+    .options-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:16px; }
+    .option-btn { background:rgba(0,15,25,0.8); border:1px solid #001822; color:#4ab8d0; font-family:'Share Tech Mono',monospace; font-size:0.79rem; padding:12px 14px; border-radius:3px; cursor:pointer; text-align:left; transition:all 0.18s; position:relative; overflow:hidden; }
+    .option-btn::before { content:''; position:absolute; left:0; top:0; bottom:0; width:2px; background:#00e5ff; opacity:0; transition:opacity 0.15s; }
+    .option-btn:hover { border-color:#00e5ff44; color:#aaeeff; background:rgba(0,229,255,0.05); }
+    .option-btn:hover::before { opacity:1; }
+    .option-btn.correct { background:rgba(0,40,25,0.9); border-color:#00ff9966; color:#00ff99; box-shadow:0 0 12px rgba(0,255,150,0.1); }
+    .option-btn.correct::before { opacity:1; background:#00ff99; }
+    .option-btn.wrong { background:rgba(10,0,20,0.9); border-color:#ff446655; color:#ff7799; }
+    #puzzle-feedback { font-size:0.8rem; margin-bottom:14px; padding:11px 14px; border-radius:3px; display:none; line-height:1.55; }
+    #puzzle-feedback.success { background:rgba(0,30,18,0.9); border:1px solid #00ff9933; border-left:3px solid #00ff99; color:#88ffcc; display:block; }
+    #puzzle-feedback.fail    { background:rgba(10,0,25,0.9); border:1px solid #ff446633; border-left:3px solid #ff4466; color:#ff9ab0; display:block; }
+    #next-puzzle-btn { display:none; background:transparent; border:1px solid #00e5ff66; color:#00e5ff; font-family:'Share Tech Mono',monospace; font-size:0.75rem; letter-spacing:3px; padding:11px 26px; cursor:pointer; border-radius:2px; margin-top:4px; transition:all 0.2s; }
+    #next-puzzle-btn:hover { background:rgba(0,229,255,0.08); border-color:#00e5ff; color:#fff; box-shadow:0 0 16px rgba(0,229,255,0.2); }
+    #monitor-neck { width:50px; height:16px; background:linear-gradient(90deg,#030e18,#071828,#030e18); clip-path:polygon(20% 0%,80% 0%,90% 100%,10% 100%); }
+    #monitor-base { width:180px; height:10px; background:linear-gradient(180deg,#071828,#030e18); border-radius:0 0 8px 8px; box-shadow:0 4px 12px rgba(0,0,0,0.6); }
+
+    /* ── Room Transition ── */
+    #room-transition { display:none; position:fixed; inset:0; z-index:300; background:#000; justify-content:center; align-items:center; flex-direction:column; gap:16px; }
+    #room-transition.active { display:flex; animation:fadeInOut 2.2s forwards; }
+    @keyframes fadeInOut { 0%{opacity:0;} 25%{opacity:1;} 75%{opacity:1;} 100%{opacity:0;pointer-events:none;} }
+    #transition-text { font-family:'Orbitron',monospace; font-size:1.4rem; font-weight:700; color:#00e5ff; letter-spacing:4px; text-align:center; text-shadow:0 0 30px #00e5ff; }
+    #transition-sub { color:#104455; font-size:0.75rem; letter-spacing:3px; }
+
+    /* ── Crosshair ── */
+    #crosshair { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); width:20px; height:20px; pointer-events:none; z-index:50; }
+    #crosshair::before, #crosshair::after { content:''; position:absolute; background:rgba(0,200,255,0.7); border-radius:1px; }
+    #crosshair::before { width:2px; height:100%; left:50%; transform:translateX(-50%); }
+    #crosshair::after  { width:100%; height:2px; top:50%; transform:translateY(-50%); }
+
+    /* ── Intro ── */
+    #intro { position:fixed; inset:0; background:#000; z-index:999; display:flex; flex-direction:column; justify-content:center; align-items:center; gap:24px; }
+    #intro.fade-out { animation:fadeOut 0.8s forwards; }
+    @keyframes fadeOut { to { opacity:0; pointer-events:none; } }
+    .intro-title { font-family:'Orbitron',monospace; font-size:clamp(2rem,6vw,3.8rem); font-weight:900; color:#00e5ff; text-align:center; text-shadow:0 0 40px #00e5ff99; letter-spacing:4px; line-height:1.2; }
+    .intro-subtitle { color:#00e5ff; font-family:'Orbitron',monospace; font-size:clamp(0.9rem,2.5vw,1.2rem); letter-spacing:6px; text-align:center; opacity:0.6; }
+    .intro-sub { color:#104455; font-size:0.85rem; letter-spacing:3px; text-align:center; max-width:440px; line-height:1.7; }
+    .intro-stack { display:flex; flex-direction:column; align-items:center; gap:0; margin:8px 0; }
+    .stack-frame { border:1px solid #00e5ff55; padding:8px 48px; color:#00ddff; font-size:0.75rem; letter-spacing:2px; background:#040e18; position:relative; }
+    .stack-frame::before { content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:#00e5ff44; }
+    .stack-frame:first-child { border-bottom: none; }
+    .stack-frame:nth-child(2) { border-bottom: none; opacity:0.8; }
+    .stack-frame:nth-child(3) { border-bottom: none; opacity:0.6; }
+    .stack-frame:last-child { opacity:0.4; }
+    .stack-label { font-size:0.6rem; color:#00e5ff33; letter-spacing:4px; margin-bottom:2px; }
+    #start-btn { background:transparent; border:2px solid #00e5ff; color:#00e5ff; font-family:'Orbitron',monospace; font-weight:700; font-size:0.9rem; letter-spacing:4px; padding:16px 48px; cursor:pointer; border-radius:2px; transition:all 0.3s; margin-top:10px; }
+    #start-btn:hover { background:#00e5ff; color:#000; box-shadow:0 0 40px #00e5ff88; }
+
+    /* ── Score popup ── */
+    #score-popup { position:fixed; top:80px; right:28px; z-index:150; display:none; background:#001020; border:1px solid #00e5ff66; color:#00ddff; font-size:0.8rem; padding:10px 20px; border-radius:3px; letter-spacing:1px; animation:popIn 0.3s ease; }
+    @keyframes popIn { from{transform:scale(0.8) translateY(-10px);opacity:0;} to{transform:scale(1);opacity:1;} }
+
+    /* ── Progress counter ── */
+    #escape-counter { position:fixed; bottom:28px; left:50%; transform:translateX(-50%); z-index:150; display:flex; align-items:center; gap:10px; background:rgba(0,15,25,0.88); border:1px solid #00e5ff33; padding:10px 24px; border-radius:4px; pointer-events:none; }
+    .counter-label { font-size:0.65rem; letter-spacing:3px; color:#104455; }
+    .counter-pips { display:flex; gap:8px; }
+    .pip { width:14px; height:14px; border-radius:2px; border:1.5px solid #00e5ff44; background:transparent; transition:all 0.4s; }
+    .pip.filled { background:#00e5ff; border-color:#00e5ff; box-shadow:0 0 10px #00e5ff; }
+
+    /* ── Victory ── */
+    #victory { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.96); z-index:500; flex-direction:column; justify-content:center; align-items:center; gap:20px; }
+    #victory.open { display:flex; }
+    .victory-title { font-family:'Orbitron',monospace; font-size:3rem; font-weight:900; color:#00e5ff; text-shadow:0 0 60px #00e5ff; animation:pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{text-shadow:0 0 60px #00e5ff;} 50%{text-shadow:0 0 100px #00e5ff,0 0 120px #00ffcc;} }
+    .victory-sub { color:#80ccdd; font-size:1rem; letter-spacing:2px; text-align:center; }
+    .victory-score { color:#ffcc00; font-size:1.3rem; margin-top:10px; }
+    .victory-stack { display:flex; flex-direction:column; align-items:center; margin:10px 0; }
+    .v-frame { width:120px; height:34px; border:2px solid #00e5ff; display:flex; align-items:center; justify-content:center; font-size:0.7rem; color:#00e5ff; background:#030e18; animation:frameGlow 1.5s ease-in-out infinite alternate; }
+    .v-frame:not(:last-child) { border-bottom:none; }
+    .v-frame:nth-child(2) { animation-delay:0.2s; }
+    .v-frame:nth-child(3) { animation-delay:0.4s; }
+    @keyframes frameGlow { from{box-shadow:0 0 4px #00e5ff;border-color:#00e5ff55;} to{box-shadow:0 0 16px #00e5ff;border-color:#00e5ff;} }
+    .v-arrow { font-size:0.9rem; color:#00e5ff66; }
+    .victory-btns { display:flex; gap:16px; margin-top:20px; }
+    .victory-btn { background:none; border:2px solid #00e5ff; color:#00e5ff; font-family:'Orbitron',monospace; font-size:0.8rem; letter-spacing:3px; padding:14px 32px; cursor:pointer; border-radius:2px; transition:all 0.3s; }
+    .victory-btn:hover { background:#00e5ff; color:#000; box-shadow:0 0 30px #00e5ff88; }
+    .victory-btn.secondary { border-color:#ffcc00; color:#ffcc00; }
+    .victory-btn.secondary:hover { background:#ffcc00; color:#000; box-shadow:0 0 30px #ffcc0088; }
+
+    /* ── Did Not Escape ── */
+    #did-not-escape { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.96); z-index:500; flex-direction:column; justify-content:center; align-items:center; gap:20px; }
+    #did-not-escape.open { display:flex; }
+    .escape-fail-title { font-family:'Orbitron',monospace; font-size:2.8rem; font-weight:900; color:#ff4444; text-shadow:0 0 40px #ff4444; animation:pulse-red 1s infinite; }
+    @keyframes pulse-red { 0%,100%{text-shadow:0 0 40px #ff4444;} 50%{text-shadow:0 0 60px #ff4444,0 0 80px #ff0000;} }
+    .escape-fail-sub { color:#ff6b6b; font-size:1.2rem; letter-spacing:3px; }
+    .escape-fail-msg { color:#9a5555; font-size:0.9rem; text-align:center; max-width:500px; }
+    .escape-fail-score { color:#ffaa00; font-size:1.1rem; margin-top:10px; }
+    .escape-fail-btns { display:flex; gap:16px; margin-top:20px; }
+    .escape-fail-btn { background:none; border:2px solid #ff4444; color:#ff4444; font-family:'Orbitron',monospace; font-size:0.8rem; letter-spacing:3px; padding:14px 32px; cursor:pointer; border-radius:2px; transition:all 0.3s; }
+    .escape-fail-btn:hover { background:#ff4444; color:#000; box-shadow:0 0 30px #ff444488; }
+    .escape-fail-btn.secondary { border-color:#ffaa00; color:#ffaa00; }
+    .escape-fail-btn.secondary:hover { background:#ffaa00; color:#000; box-shadow:0 0 30px #ffaa0088; }
+
+    a-scene { cursor: pointer; }
+  </style>
+</head>
+<body>
+
+<!-- ── Intro Screen ── -->
+<div id="intro">
+  <div class="intro-title">📦 STACK<br>ESCAPE ROOM</div>
+  <div class="intro-subtitle">PUSH YOUR WAY TO ESCAPE</div>
+  <div class="intro-sub">Navigate a dungeon of stackS, master PUSH &amp; POP operations, and solve stack challenges to escape.</div>
+  <div class="intro-stack">
+    <div class="stack-label">TOP →</div>
+    <div class="stack-frame">FRAME 3  [TOP]</div>
+    <div class="stack-frame">FRAME 2</div>
+    <div class="stack-frame">FRAME 1</div>
+    <div class="stack-frame">BASE  [BOTTOM]</div>
+  </div>
+  <button id="start-btn" onclick="startGame()">ENTER THE STACK</button>
+</div>
+
+<div id="crosshair"></div>
+
+<!-- ── HUD ── -->
+<div id="hud">
+  <div id="hud-title">📦 STACK ESCAPE</div>
+  <div id="hud-right">
+    <div class="hud-badge" id="puzzle-timer">2:00</div>
+    <div class="hud-badge" id="room-name-badge">STACK DUNGEON</div>
+    <div class="hud-badge" id="score-badge">SCORE: 0</div>
+    <div class="hud-badge" id="puzzle-count-badge">FRAMES: 0/3</div>
+  </div>
+</div>
+
+<!-- ── Progress counter ── -->
+<div id="escape-counter">
+  <span class="counter-label">STACK FRAMES POPPED</span>
+  <div class="counter-pips">
+    <div class="pip" id="pip-0"></div>
+    <div class="pip" id="pip-1"></div>
+    <div class="pip" id="pip-2"></div>
+  </div>
+  <span class="counter-label" id="counter-text">0 / 3</span>
+</div>
+
+<div id="score-popup">+200 PTS ✓</div>
+
+<!-- ── Room transition ── -->
+<div id="room-transition">
+  <div id="transition-text">ENTERING THE STACK...</div>
+  <div id="transition-sub">PUSHING CALL FRAMES ONTO THE DUNGEON</div>
+</div>
+
+<!-- ── Puzzle Modal ── -->
+<div id="puzzle-modal">
+  <div id="monitor-assembly">
+    <div id="monitor-bezel">
+      <span id="monitor-brand">STACK·SYS</span>
+      <div id="monitor-screen">
+        <div id="screen-titlebar">
+          <div id="titlebar-dots">
+            <!-- Red dot closes only when canClose is true (answer was submitted) -->
+            <div class="tb-dot red" onclick="tryClosePuzzle()"></div>
+            <div class="tb-dot yellow"></div>
+            <div class="tb-dot green"></div>
+          </div>
+          <div id="titlebar-name">
+            <span id="titlebar-filename">stack_terminal</span>.exe — frame_puzzle
+          </div>
+          <div id="titlebar-right"><span>●●●</span></div>
+        </div>
+        <div id="screen-content">
+          <div class="puzzle-tag" id="puzzle-tag">STACK OPS</div>
+          <div id="puzzle-title">Loading...</div>
+          <div id="puzzle-difficulty"></div>
+          <hr class="screen-divider">
+          <div id="puzzle-description"></div>
+          <pre id="puzzle-code-block"></pre>
+          <button id="hint-btn" onclick="showHint()">💡 SHOW HINT</button>
+          <div id="hint-text"></div>
+          <div class="options-grid" id="options-grid"></div>
+          <div id="puzzle-feedback"></div>
+          <button id="next-puzzle-btn" onclick="handleNextBtn()">CONTINUE →</button>
+        </div>
+      </div>
+    </div>
+    <div id="monitor-neck"></div>
+    <div id="monitor-base"></div>
+  </div>
+</div>
+
+<!-- ── Victory ── -->
+<div id="victory">
+  <div class="victory-title">📦 POPPED OUT!</div>
+  <div class="victory-stack">
+    <div class="v-frame">✓ FRAME 3</div>
+    <div class="v-frame">✓ FRAME 2</div>
+    <div class="v-frame">✓ FRAME 1</div>
+    <div class="v-arrow">▼ STACK EMPTY</div>
+  </div>
+  <div class="victory-sub">ALL FRAMES POPPED<br>YOU ESCAPED THE STACK DUNGEON</div>
+  <div class="victory-score" id="final-score"></div>
+  <div class="victory-btns">
+    <button class="victory-btn" onclick="location.reload()">PLAY AGAIN</button>
+    <button class="victory-btn secondary" onclick="goToLevels()">← LEVEL SELECT</button>
+  </div>
+</div>
+
+<!-- ── Did Not Escape ── -->
+<div id="did-not-escape">
+  <div class="escape-fail-title">⏰ TIME'S UP</div>
+  <div class="escape-fail-sub">YOU DID NOT ESCAPE</div>
+  <div class="escape-fail-msg">The dungeon locked down before you could solve all the puzzles.</div>
+  <div class="escape-fail-score" id="timeout-score"></div>
+  <div class="escape-fail-btns">
+    <button class="escape-fail-btn" onclick="location.reload()">TRY AGAIN</button>
+    <button class="escape-fail-btn secondary" onclick="goToLevels()">← LEVEL SELECT</button>
+  </div>
+</div>
+
+<!-- ── A-Frame Scene ── -->
+<a-scene id="scene" style="display:none" vr-mode-ui="enabled: false" renderer="antialias: true">
+  <a-assets timeout="30000">
+    <a-asset-item id="stack-model" src="/static/star_wars.glb"></a-asset-item>
+  </a-assets>
+
+  <a-sky id="room-sky" color="#000a14"></a-sky>
+
+  <a-entity id="stack-room-entity">
+    <!-- Main room model -->
+    <a-gltf-model id="room-floor" src="#stack-model" position="0 0 0" rotation="0 0 0" scale="3 3 3"></a-gltf-model>
+
+    <!-- ── Puzzle Zone 0: Frame Alpha — position unchanged ── -->
+    <a-entity id="node-zone-0" class="node-zone" position="-3 0 -1">
+      <a-box width="0.5" height="0.1" depth="0.4" color="#00e5ff" opacity="0.9"
+        position="0 0.35 0"
+        animation__pulse="property:scale;from:1 1 1;to:1.15 1.15 1.15;loop:true;dur:700;dir:alternate;easing:easeInOutSine">
+      </a-box>
+      <a-box width="0.5" height="0.1" depth="0.4" color="#0099bb" opacity="0.7" position="0 0.22 0"></a-box>
+      <a-box width="0.5" height="0.1" depth="0.4" color="#006688" opacity="0.55" position="0 0.09 0"></a-box>
+      <a-light type="point" color="#00aacc" intensity="0.9" distance="4"></a-light>
+      <a-entity id="node-hint-0" position="0 1.8 0" visible="false">
+        <a-plane width="1.8" height="0.32" color="#000d18" opacity="0.92" position="0 0 -0.01" side="double"></a-plane>
+        <a-text value="[ E ]  STACK PUZZLE 1" align="center" color="#00e5ff" scale="0.56 0.56 0.56"></a-text>
+      </a-entity>
+      <a-text value="PUSH" position="0 0.6 0" color="#00e5ff44" scale="0.7 0.7 0.7" align="center"></a-text>
+    </a-entity>
+
+    <!-- ── Puzzle Zone 1: Frame Beta — UPDATED X=29.11, Y=1.60, Z=3.90 ── -->
+    <a-entity id="node-zone-1" class="node-zone" position="29.11 1.60 3.90">
+      <a-box width="0.5" height="0.1" depth="0.4" color="#00ffcc" opacity="0.9"
+        position="0 0.35 0"
+        animation__pulse="property:scale;from:1 1 1;to:1.15 1.15 1.15;loop:true;dur:900;dir:alternate;easing:easeInOutSine">
+      </a-box>
+      <a-box width="0.5" height="0.1" depth="0.4" color="#00bb99" opacity="0.7" position="0 0.22 0"></a-box>
+      <a-box width="0.5" height="0.1" depth="0.4" color="#007766" opacity="0.55" position="0 0.09 0"></a-box>
+      <a-light type="point" color="#00ccaa" intensity="0.9" distance="4"></a-light>
+      <a-entity id="node-hint-1" position="0 1.8 0" visible="false">
+        <a-plane width="1.8" height="0.32" color="#000d18" opacity="0.92" position="0 0 -0.01" side="double"></a-plane>
+        <a-text value="[ E ]  STACK PUZZLE 2" align="center" color="#00ffcc" scale="0.56 0.56 0.56"></a-text>
+      </a-entity>
+      <a-text value="POP" position="0 0.6 0" color="#00ffcc44" scale="0.7 0.7 0.7" align="center"></a-text>
+    </a-entity>
+
+    <!-- ── Puzzle Zone 2: Frame Gamma — UPDATED X=-30.63, Y=1.60, Z=30.44 ── -->
+    <a-entity id="node-zone-2" class="node-zone" position="-30.63 1.60 30.44">
+      <a-box width="0.5" height="0.1" depth="0.4" color="#7df9ff" opacity="0.9"
+        position="0 0.35 0"
+        animation__pulse="property:scale;from:1 1 1;to:1.2 1.2 1.2;loop:true;dur:550;dir:alternate;easing:easeInOutSine">
+      </a-box>
+      <a-box width="0.5" height="0.1" depth="0.4" color="#55ccdd" opacity="0.7" position="0 0.22 0"></a-box>
+      <a-box width="0.5" height="0.1" depth="0.4" color="#338899" opacity="0.55" position="0 0.09 0"></a-box>
+      <a-light type="point" color="#55eeff" intensity="0.9" distance="4"></a-light>
+      <a-entity id="node-hint-2" position="0 1.8 0" visible="false">
+        <a-plane width="2.0" height="0.32" color="#000d18" opacity="0.92" position="0 0 -0.01" side="double"></a-plane>
+        <a-text value="[ E ]  STACK PUZZLE 3 — ESCAPE!" align="center" color="#7df9ff" scale="0.52 0.52 0.52"></a-text>
+      </a-entity>
+      <a-text value="PEEK" position="0 0.6 0" color="#7df9ff44" scale="0.7 0.7 0.7" align="center"></a-text>
+    </a-entity>
+
+    <!-- Floating EMPTY decoration -->
+    <a-entity position="0 1.2 -8">
+      <a-text value="STACK IS EMPTY" align="center" color="#00e5ff11" scale="2 2 2"></a-text>
+    </a-entity>
+  </a-entity>
+
+  <!-- Lighting -->
+  <a-light type="ambient" color="#ffffff" intensity="1.6"></a-light>
+  <a-light id="main-light" type="point" position="0 4 0" color="#0044aa" intensity="0.4" distance="20"></a-light>
+  <a-light type="point" position="-3 3 -1"        color="#00e5ff" intensity="0.35" distance="8"></a-light>
+  <a-light type="point" position="29.11 4 3.90"   color="#00ffcc" intensity="0.35" distance="8"></a-light>
+  <a-light type="point" position="-30.63 4 30.44" color="#7df9ff" intensity="0.35" distance="8"></a-light>
+
+  <a-entity id="rig" position="0 0 0">
+    <a-camera look-controls wasd-controls="acceleration: 30" position="0 1.6 0">
+      <a-cursor fuse="false" color="#00e5ff" raycaster="objects: .clickable"></a-cursor>
+    </a-camera>
+  </a-entity>
+</a-scene>
+
+<script>
+/* ════════════════════════════════════════════════
+   STACK PUZZLE BANK — 3 puzzles
+════════════════════════════════════════════════ */
+const STACK_PUZZLES = [
+  {
+    tag: "STACK OPS",
+    title: "PUSH / POP — What's on Top?",
+    difficulty: "EASY",
+    description: "A series of PUSH and POP operations are performed on an initially empty stack.\nAfter all operations complete, what value sits at the TOP of the stack?",
+    code:
+`stack = []   ← empty
+
+stack.push(10)   →  [10]
+stack.push(20)   →  [10, 20]
+stack.push(30)   →  [10, 20, 30]
+stack.pop()      →  [10, 20]       # removes 30
+stack.push(40)   →  [10, 20, 40]
+stack.pop()      →  [10, 20]       # removes 40
+stack.push(50)   →  [10, 20, 50]
+
+# TOP is the rightmost element
+# What is stack.peek() / stack[-1] ?`,
+    hint: "LIFO: Last In, First Out. Only the most recent PUSH that hasn't been POPped remains at top.",
+    options: ["10", "20", "50", "40"],
+    answer: 2,
+    explanation: "✓ Correct! Final state: [10, 20, 50]. The last PUSH(50) was never popped, so 50 is on top.",
+    points: 150
+  },
+  {
+  tag: "STACK OVERFLOW",
+  title: "Identify the Condition",
+  difficulty: "EASY",
+  description: "When does stack overflow occur?",
+  code: `int stack[5];`,
+  hint: "Stack has fixed size.",
+  options: [
+    "When popping from empty stack",
+    "When pushing into full stack",
+    "When stack size is 0",
+    "When top = 0"
+  ],
+  answer: 1,
+  explanation: "✓ Correct! Stack overflow occurs when pushing into a full stack.",
+  points: 100
+  },
+  {
+    tag: "CALL STACK",
+    title: "Recursion & The Call Stack",
+    difficulty: "HARD",
+    description: "The following recursive function is called as factorial(4).\nTrace the call stack frames in order. What is the correct sequence from BOTTOM to TOP at the deepest point?",
+    code:
+`def factorial(n):
+    if n == 0:
+        return 1          ← BASE CASE
+    return n * factorial(n - 1)
+
+# Called with:  factorial(4)
+
+# Each recursive call PUSHES a new frame:
+#   factorial(4) → calls factorial(3)
+#   factorial(3) → calls factorial(2)
+#   factorial(2) → calls factorial(1)
+#   factorial(1) → calls factorial(0)
+#   factorial(0) → returns 1 (base case)
+
+# At the deepest point, the stack has 5 frames.
+# Stack grows UPWARD.  Bottom = first call.`,
+    hint: "The first call is always at the BOTTOM. Each nested call is PUSHed on top. factorial(4) was called first, so it sits at the bottom.",
+    options: [
+      "BOTTOM: f(0) → f(1) → f(2) → f(3) → f(4) :TOP",
+      "BOTTOM: f(4) → f(3) → f(2) → f(1) → f(0) :TOP",
+      "BOTTOM: f(4) → f(2) → f(0) :TOP  (only odd frames)",
+      "BOTTOM: f(0) → f(4) :TOP  (only base and first)"
+    ],
+    answer: 1,
+    explanation: "✓ Correct! factorial(4) is the FIRST call → it sits at the BOTTOM. Each deeper call is pushed on top. factorial(0) is the last frame pushed → TOP.",
+    points: 300
+  }
+];
+
+/* ════════════════════════════════════════════════
+   GAME STATE
+════════════════════════════════════════════════ */
+const TOTAL_PUZZLES = 3;
+const GAME_TIME = 120; // 2 minutes in seconds
+let totalScore     = 0;
+let solvedCount    = 0;
+let puzzleActive   = false;   // true while awaiting an answer click
+let canClose       = false;   // true after an answer has been submitted
+let nearNode       = -1;
+let gameTimeLeft  = GAME_TIME;
+let timerInterval = null;
+let currentNodeIdx = -1;
+const nodeSolved   = [false, false, false];
+let nextBtnAction  = null;
+
+// Positions matching A-Frame entity positions above
+const NODE_ZONES = [
+  { x: -3,     z: -1    },   // Puzzle 1 — unchanged
+  { x:  29.11, z:  3.90 },   // Puzzle 2 — updated
+  { x: -30.63, z: 30.44 }    // Puzzle 3 — updated
+];
+const NODE_DIST = 2.0;
+
+/* ════════════════════════════════════════════════
+   START
+════════════════════════════════════════════════ */
+function startGame() {
+  document.getElementById('intro').classList.add('fade-out');
+  const sceneEl = document.getElementById('scene');
+  sceneEl.style.display = '';
+  setTimeout(() => document.getElementById('intro').style.display = 'none', 800);
+
+  const overlay = document.getElementById('room-transition');
+  overlay.classList.add('active');
+  setTimeout(() => overlay.classList.remove('active'), 2200);
+
+  const doLoad = () => { startProximityLoop(); };
+  if (sceneEl.hasLoaded) doLoad();
+  else sceneEl.addEventListener('loaded', doLoad, { once: true });
+
+  document.getElementById('room-name-badge').textContent    = '📦 STACK DUNGEON';
+  document.getElementById('puzzle-count-badge').textContent = `FRAMES: 0/${TOTAL_PUZZLES}`;
+
+    
+  // Start the timer
+  startTimer();
+}
+
+/* ════════════════════════════════════════════════
+   TIMER FUNCTIONS
+════════════════════════════════════════════════ */
+function startTimer() {
+  gameRunning = true;
+  gameTimeLeft = GAME_TIME;
+  updateTimerDisplay();
+  timerInterval = setInterval(() => {
+    gameTimeLeft--;
+    updateTimerDisplay();
+    
+    if (gameTimeLeft <= 0) {
+      endGameTimeout();
+    }
+  }, 1000);
+}
+
+function updateTimerDisplay() {
+  const mins = Math.floor(gameTimeLeft / 60);
+  const secs = gameTimeLeft % 60;
+  const display = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  const badge = document.getElementById('puzzle-timer');
+  if (badge) {
+    badge.textContent = `TIME: ${display}`;
+    // Warning color at 30 seconds
+    if (gameTimeLeft <= 30) badge.style.color = '#ff4444';
+    else badge.style.color = '#ffb3b3';
+  }
+}
+
+function stopTimer() {
+  gameRunning = false;
+  if (timerInterval) clearInterval(timerInterval);
+}
+
+function endGameTimeout() {
+  stopTimer();
+  puzzleActive = true; // Prevent further interaction
+  closePuzzle();
+  
+  document.getElementById('timeout-score').textContent = `SCORE BEFORE TIMEOUT: ${totalScore} PTS`;
+  document.getElementById('did-not-escape').classList.add('open');
+}
+
+/* ════════════════════════════════════════════════
+   KEYBOARD — [E] opens puzzle when near a node
+════════════════════════════════════════════════ */
+window.addEventListener('keydown', (e) => {
+  // Block [E] if a modal is already open
+  if (document.getElementById('puzzle-modal').classList.contains('open')) return;
+  if (e.key === 'e' || e.key === 'E') {
+    if (nearNode >= 0 && !nodeSolved[nearNode]) {
+      openNodePuzzle(nearNode);
+    }
+  }
+});
+
+/* ════════════════════════════════════════════════
+   PLAYER POSITION
+════════════════════════════════════════════════ */
+function getPlayerPos() {
+  const cam = document.querySelector('a-camera');
+  if (cam && cam.object3D) {
+    const wp = new THREE.Vector3();
+    cam.object3D.getWorldPosition(wp);
+    return wp;
+  }
+  const rig = document.getElementById('rig');
+  return rig && rig.object3D ? rig.object3D.position : null;
+}
+
+/* ════════════════════════════════════════════════
+   PROXIMITY LOOP
+════════════════════════════════════════════════ */
+function startProximityLoop() {
+  setInterval(() => {
+    // Don't update proximity while modal is open
+    if (document.getElementById('puzzle-modal').classList.contains('open')) return;
+    const p = getPlayerPos();
+    if (!p) return;
+
+    console.log(`Position: X=${p.x.toFixed(2)}, Y=${p.y.toFixed(2)}, Z=${p.z.toFixed(2)}`);
+
+    let foundIdx = -1;
+    NODE_ZONES.forEach((nz, i) => {
+      const hint = document.getElementById(`node-hint-${i}`);
+      if (nodeSolved[i]) {
+        if (hint) hint.setAttribute('visible', false);
+        return;
+      }
+      const dist = Math.hypot(p.x - nz.x, p.z - nz.z);
+      if (dist < NODE_DIST) {
+        foundIdx = i;
+        if (hint) hint.setAttribute('visible', true);
+      } else {
+        if (hint) hint.setAttribute('visible', false);
+      }
+    });
+
+    if (foundIdx !== nearNode) {
+      nearNode = foundIdx;
+      if (foundIdx >= 0 && !nodeSolved[foundIdx]) {
+        const labels = ['1: Push/Pop', '2: Balanced Brackets', '3: Call Stack — ESCAPE!'];
+        showToast(`Near Frame ${foundIdx + 1} — Press [E] for Puzzle ${labels[foundIdx]}`);
+      } else {
+        hideToast();
+      }
+    }
+  }, 150);
+}
+
+/* ════════════════════════════════════════════════
+   OPEN PUZZLE
+════════════════════════════════════════════════ */
+function openNodePuzzle(idx) {
+  const puzzle = STACK_PUZZLES[idx];
+  puzzleActive   = true;
+  canClose       = false;
+  currentNodeIdx = idx;
+  hideToast();
+
+  populateModal(puzzle, `stack_puzzle_${idx + 1}`);
+  // Attach click handlers after options are rendered
+  document.querySelectorAll('.option-btn').forEach((btn, i) => {
+    btn.onclick = () => checkAnswer(i, idx, btn);
+  });
+  document.getElementById('puzzle-modal').classList.add('open');
+  document.getElementById('screen-content').scrollTop = 0;
+}
+
+/* ════════════════════════════════════════════════
+   CHECK ANSWER
+════════════════════════════════════════════════ */
+function checkAnswer(chosen, nodeIdx, btnEl) {
+  if (!puzzleActive) return;
+  const puzzle = STACK_PUZZLES[nodeIdx];
+
+  // Disable all option buttons immediately to prevent double-clicks
+  document.querySelectorAll('.option-btn').forEach(b => b.style.pointerEvents = 'none');
+  const feedback = document.getElementById('puzzle-feedback');
+
+  if (chosen === puzzle.answer) {
+    /* ── CORRECT ── */
+    btnEl.classList.add('correct');
+    feedback.className   = 'success';
+    feedback.textContent = puzzle.explanation;
+    feedback.style.display = 'block';
+
+    totalScore += puzzle.points;
+    document.getElementById('score-badge').textContent = `SCORE: ${totalScore}`;
+    showScorePopup(`+${puzzle.points} PTS ✓`);
+
+    nodeSolved[nodeIdx] = true;
+    solvedCount++;
+
+    // Dim the stack frame visuals
+    const zone = document.getElementById(`node-zone-${nodeIdx}`);
+    if (zone) {
+      zone.querySelectorAll('a-box').forEach(box => {
+        box.setAttribute('color', '#005566');
+        box.setAttribute('opacity', '0.25');
+      });
+    }
+
+    updateProgress();
+    puzzleActive = false;
+    canClose     = true;
+
+    setTimeout(() => {
+      const btn     = document.getElementById('next-puzzle-btn');
+      const isLast  = solvedCount >= TOTAL_PUZZLES;
+      btn.textContent = isLast ? '🏆 POP OUT!' : 'CLOSE ✓';
+      nextBtnAction = () => {
+        closePuzzle();
+        if (isLast) setTimeout(showVictory, 600);
+      };
+      btn.style.display = 'block';
+    }, 800);
+
+  } else {
+    /* ── WRONG — show hint, no answer reveal, offer Try Again ── */
+    btnEl.classList.add('wrong');
+    feedback.className   = 'fail';
+    feedback.textContent = '✗ Not quite! Read the hint below, then try again.';
+    feedback.style.display = 'block';
+
+    // Auto-reveal hint on wrong answer
+    const hintEl = document.getElementById('hint-text');
+    hintEl.style.display = 'block';
+
+    puzzleActive = false;
+    canClose     = true;
+
+    setTimeout(() => {
+      const btn     = document.getElementById('next-puzzle-btn');
+      btn.textContent = '↺  TRY AGAIN';
+      nextBtnAction = () => {
+        // Close and re-open the same puzzle fresh
+        closePuzzle();
+        setTimeout(() => openNodePuzzle(nodeIdx), 220);
+      };
+      btn.style.display = 'block';
+    }, 600);
+  }
+}
+
+function handleNextBtn() {
+  if (nextBtnAction) nextBtnAction();
+}
+
+/* ════════════════════════════════════════════════
+   RED DOT — only works after an answer is submitted
+════════════════════════════════════════════════ */
+function tryClosePuzzle() {
+  if (canClose) closePuzzle();
+  // While puzzleActive (no answer yet), the red dot does nothing —
+  // forcing the player to pick an answer before dismissing.
+}
+
+/* ════════════════════════════════════════════════
+   PROGRESS COUNTER
+════════════════════════════════════════════════ */
+function updateProgress() {
+  for (let i = 0; i < TOTAL_PUZZLES; i++) {
+    const pip = document.getElementById(`pip-${i}`);
+    if (pip) pip.classList.toggle('filled', i < solvedCount);
+  }
+  document.getElementById('counter-text').textContent       = `${solvedCount} / ${TOTAL_PUZZLES}`;
+  document.getElementById('puzzle-count-badge').textContent = `FRAMES: ${solvedCount}/${TOTAL_PUZZLES}`;
+}
+
+/* ════════════════════════════════════════════════
+   VICTORY
+════════════════════════════════════════════════ */
+function showVictory() {
+  stopTimer();
+  document.getElementById('final-score').textContent = `FINAL SCORE: ${totalScore} PTS`;
+  document.getElementById('victory').classList.add('open');
+}
+
+function goToLevels() {
+  document.body.style.transition = 'opacity .6s';
+  document.body.style.opacity    = '0';
+  setTimeout(() => { window.location.href = '/level'; }, 650);
+}
+
+/* ════════════════════════════════════════════════
+   MODAL RENDERER
+════════════════════════════════════════════════ */
+function populateModal(puzzle, filename) {
+  document.getElementById('titlebar-filename').textContent  = filename;
+  document.getElementById('puzzle-tag').textContent         = puzzle.tag;
+  document.getElementById('puzzle-title').textContent       = puzzle.title;
+  const cls = { EASY:'diff-easy', MEDIUM:'diff-medium', HARD:'diff-hard' }[puzzle.difficulty];
+  document.getElementById('puzzle-difficulty').innerHTML    = `<span class="${cls}">◆ ${puzzle.difficulty}</span>`;
+  document.getElementById('puzzle-description').textContent = puzzle.description;
+  document.getElementById('puzzle-code-block').textContent  = puzzle.code;
+  document.getElementById('hint-text').style.display        = 'none';
+  document.getElementById('hint-text').textContent          = '💡 ' + puzzle.hint;
+  document.getElementById('puzzle-feedback').className      = '';
+  document.getElementById('puzzle-feedback').style.display  = 'none';
+  document.getElementById('next-puzzle-btn').style.display  = 'none';
+  nextBtnAction = null;
+
+  const grid = document.getElementById('options-grid');
+  grid.innerHTML = '';
+  puzzle.options.forEach((opt, i) => {
+    const btn       = document.createElement('button');
+    btn.className   = 'option-btn';
+    btn.textContent = `${['A','B','C','D'][i]}.  ${opt}`;
+    grid.appendChild(btn);
+  });
+}
+
+/* ════════════════════════════════════════════════
+   HELPERS
+════════════════════════════════════════════════ */
+function closePuzzle() {
+  document.getElementById('puzzle-modal').classList.remove('open');
+  puzzleActive   = false;
+  canClose       = false;
+  currentNodeIdx = -1;
+}
+
+function showHint() {
+  document.getElementById('hint-text').style.display = 'block';
+}
+
+function showScorePopup(msg) {
+  const p = document.getElementById('score-popup');
+  p.textContent   = msg;
+  p.style.display = 'block';
+  setTimeout(() => p.style.display = 'none', 2000);
+}
+
+function showToast(msg) {
+  let t = document.getElementById('proximity-toast');
+  if (!t) {
+    t           = document.createElement('div');
+    t.id        = 'proximity-toast';
+    t.style.cssText = `position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#000d18;border:1px solid #00e5ff88;color:#00ddff;font-family:'Share Tech Mono',monospace;font-size:0.85rem;letter-spacing:2px;padding:12px 28px;border-radius:3px;z-index:150;pointer-events:none;`;
+    document.body.appendChild(t);
+  }
+  t.textContent   = msg;
+  t.style.display = 'block';
+}
+
+function hideToast() {
+  const t = document.getElementById('proximity-toast');
+  if (t) t.style.display = 'none';
+}
+</script>
+</body>
+</html>

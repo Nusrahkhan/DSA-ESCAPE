@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Array Escape Room</title>
+  <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap');
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Share Tech Mono', monospace; background: #000; overflow: hidden; }
+
+    #hud { position: fixed; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; align-items: center; padding: 16px 28px; background: linear-gradient(180deg, rgba(0,0,0,0.88) 0%, transparent 100%); z-index: 100; pointer-events: none; }
+    #hud-title { font-family: 'Orbitron', monospace; font-size: 1.1rem; font-weight: 900; color: #ff6b6b; letter-spacing: 3px; text-shadow: 0 0 20px rgba(255,107,107,0.53); }
+    #hud-right { display: flex; gap: 24px; align-items: center; }
+    .hud-badge { font-size: 0.75rem; color: #ffb3b3; letter-spacing: 2px; border: 1px solid rgba(255,107,107,0.27); padding: 6px 14px; border-radius: 2px; background: rgba(255,107,107,0.06); }
+    #room-name-badge { font-family: 'Orbitron', monospace; color: #ff9f43; border-color: rgba(255,159,67,0.27); background: rgba(255,159,67,0.06); }
+
+    #puzzle-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.96); z-index: 200; justify-content: center; align-items: center; }
+    #puzzle-modal.open { display: flex; }
+    #monitor-assembly { display: flex; flex-direction: column; align-items: center; animation: monitorPowerOn 0.4s ease; }
+    @keyframes monitorPowerOn { 0%{opacity:0;transform:scale(0.94) translateY(20px);filter:brightness(3);} 60%{opacity:1;filter:brightness(1.3);} 100%{transform:scale(1) translateY(0);filter:brightness(1);} }
+    #monitor-bezel { background: linear-gradient(160deg, #2a1818 0%, #1c1010 40%, #120808 100%); border-radius: 12px 12px 4px 4px; padding: 18px 18px 22px; box-shadow: 0 0 0 2px #2a1515, 4px 4px 20px rgba(0,0,0,0.8); width: min(760px, 94vw); position: relative; }
+    #monitor-bezel::after { content:''; position:absolute; bottom:10px; right:22px; width:7px; height:7px; border-radius:50%; background:#ff4466; box-shadow:0 0 6px #ff4466; animation:ledBlink 3s ease-in-out infinite; }
+    @keyframes ledBlink { 0%,90%,100%{opacity:1;} 95%{opacity:0.3;} }
+    #monitor-brand { position:absolute; bottom:8px; left:50%; transform:translateX(-50%); font-family:'Orbitron',monospace; font-size:0.55rem; color:#442222; letter-spacing:4px; }
+    #monitor-screen { background:#140000; border-radius:4px; overflow:hidden; position:relative; border:2px solid #2a0a0a; box-shadow:inset 0 0 60px rgba(30,0,0,0.9); }
+    #monitor-screen::before { content:''; position:absolute; inset:0; z-index:100; pointer-events:none; background:repeating-linear-gradient(0deg, transparent 0px, transparent 2px, rgba(0,0,0,0.18) 2px, rgba(0,0,0,0.18) 3px); }
+    #screen-titlebar { background:linear-gradient(90deg,#1e0808,#280d0d,#1e0808); border-bottom:1px solid rgba(255,107,107,0.13); display:flex; align-items:stretch; height:36px; position:relative; z-index:10; }
+    #titlebar-dots { display:flex; align-items:center; gap:7px; padding:0 14px; border-right:1px solid rgba(255,107,107,0.07); }
+    .tb-dot { width:12px; height:12px; border-radius:50%; cursor:pointer; }
+    .tb-dot.red    { background:radial-gradient(circle at 35% 35%, #ff7070, #cc3333); }
+    .tb-dot.yellow { background:radial-gradient(circle at 35% 35%, #ffdd70, #ccaa00); }
+    .tb-dot.green  { background:radial-gradient(circle at 35% 35%, #70ff99, #00aa44); }
+    #titlebar-name { flex:1; display:flex; align-items:center; justify-content:center; font-size:0.65rem; color:#6a3a3a; letter-spacing:2px; }
+    #screen-content { padding:20px 24px 24px; max-height:calc(80vh - 36px); overflow-y:auto; position:relative; z-index:10; color:#ffe0e0; }
+    #screen-content::-webkit-scrollbar { width:6px; }
+    #screen-content::-webkit-scrollbar-track { background:#0e0000; }
+    #screen-content::-webkit-scrollbar-thumb { background:rgba(255,107,107,0.2); border-radius:3px; }
+    .puzzle-tag { font-size:0.6rem; letter-spacing:4px; color:rgba(255,107,107,0.6); margin-bottom:10px; }
+    .puzzle-tag::before { content:'▸▸  '; }
+    #puzzle-title { font-family:'Orbitron',monospace; font-size:1.2rem; font-weight:700; color:#fff0f0; margin-bottom:6px; line-height:1.3; }
+    #puzzle-difficulty { font-size:0.68rem; letter-spacing:2px; margin-bottom:18px; }
+    .diff-easy { color:#00ff99; } .diff-medium { color:#ffaa00; } .diff-hard { color:#ff4466; }
+    .screen-divider { border:none; border-top:1px solid rgba(255,107,107,0.09); margin:0 0 16px 0; }
+    #puzzle-description { color:#c87a7a; font-size:0.84rem; line-height:1.75; margin-bottom:16px; padding:10px 12px; background:rgba(255,107,107,0.025); border-left:2px solid rgba(255,107,107,0.2); border-radius:0 3px 3px 0; }
+    #puzzle-code-block { background:#0a0000; border:1px solid #1a0808; border-top:2px solid rgba(255,107,107,0.13); border-radius:3px; padding:14px 16px; margin-bottom:16px; font-size:0.8rem; color:#ff9999; white-space:pre; overflow-x:auto; line-height:1.65; position:relative; }
+    #puzzle-code-block::before { content:'CODE'; position:absolute; top:-9px; left:10px; background:#0a0000; padding:0 6px; font-size:0.52rem; color:rgba(255,107,107,0.27); letter-spacing:3px; }
+    #hint-btn { background:none; border:1px solid rgba(255,204,0,0.2); color:rgba(255,204,0,0.4); font-family:'Share Tech Mono',monospace; font-size:0.68rem; letter-spacing:2px; padding:6px 14px; cursor:pointer; border-radius:2px; margin-bottom:14px; transition:all 0.2s; display:block; }
+    #hint-btn:hover { border-color:rgba(255,204,0,0.8); color:#ffcc00; background:rgba(255,204,0,0.05); }
+    #hint-text { display:none; color:rgba(255,204,0,0.6); font-size:0.76rem; margin-bottom:14px; padding:8px 12px; background:rgba(255,204,0,0.04); border-left:2px solid rgba(255,204,0,0.2); border-radius:0 3px 3px 0; }
+    .options-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:16px; }
+    .option-btn { background:rgba(20,0,0,0.8); border:1px solid #2a0d0d; color:#c87a7a; font-family:'Share Tech Mono',monospace; font-size:0.79rem; padding:12px 14px; border-radius:3px; cursor:pointer; text-align:left; transition:all 0.18s; position:relative; overflow:hidden; }
+    .option-btn::before { content:''; position:absolute; left:0; top:0; bottom:0; width:2px; background:#ff6b6b; opacity:0; transition:opacity 0.15s; }
+    .option-btn:hover { border-color:rgba(255,107,107,0.3); color:#ffcccc; background:rgba(255,107,107,0.05); }
+    .option-btn:hover::before { opacity:1; }
+    .option-btn.correct { background:rgba(0,40,25,0.9); border-color:rgba(0,255,153,0.4); color:#00ff99; }
+    .option-btn.correct::before { opacity:1; background:#00ff99; }
+    .option-btn.wrong { background:rgba(40,0,10,0.9); border-color:rgba(255,68,102,0.33); color:#ff7799; }
+    #puzzle-feedback { font-size:0.8rem; margin-bottom:14px; padding:11px 14px; border-radius:3px; display:none; line-height:1.55; }
+    #puzzle-feedback.success { background:rgba(0,30,18,0.9); border:1px solid rgba(0,255,153,0.2); border-left:3px solid #00ff99; color:#88ffcc; display:block; }
+    #puzzle-feedback.fail    { background:rgba(30,0,12,0.9); border:1px solid rgba(255,68,102,0.2); border-left:3px solid #ff4466; color:#ff9ab0; display:block; }
+    #next-puzzle-btn { display:none; background:transparent; border:1px solid rgba(255,107,107,0.4); color:#ff6b6b; font-family:'Share Tech Mono',monospace; font-size:0.75rem; letter-spacing:3px; padding:11px 26px; cursor:pointer; border-radius:2px; margin-top:4px; transition:all 0.2s; }
+    #next-puzzle-btn:hover { background:rgba(255,107,107,0.08); border-color:#ff6b6b; color:#fff; }
+    #monitor-neck { width:50px; height:16px; background:linear-gradient(90deg,#1a0a0a,#2a1515,#1a0a0a); clip-path:polygon(20% 0%,80% 0%,90% 100%,10% 100%); }
+    #monitor-base { width:180px; height:10px; background:linear-gradient(180deg,#221212,#1a0a0a); border-radius:0 0 8px 8px; }
+
+    #room-transition { display:none; position:fixed; inset:0; z-index:300; background:#000; justify-content:center; align-items:center; flex-direction:column; gap:16px; }
+    #room-transition.active { display:flex; animation:fadeInOut 2.2s forwards; }
+    @keyframes fadeInOut { 0%{opacity:0;} 25%{opacity:1;} 75%{opacity:1;} 100%{opacity:0;pointer-events:none;} }
+    #transition-text { font-family:'Orbitron',monospace; font-size:1.4rem; font-weight:700; color:#ff6b6b; letter-spacing:4px; text-shadow:0 0 30px #ff6b6b; }
+    #transition-sub { color:#664444; font-size:0.75rem; letter-spacing:3px; }
+
+    #crosshair { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); width:20px; height:20px; pointer-events:none; z-index:50; }
+    #crosshair::before,#crosshair::after { content:''; position:absolute; background:rgba(255,150,150,0.7); border-radius:1px; }
+    #crosshair::before { width:2px; height:100%; left:50%; transform:translateX(-50%); }
+    #crosshair::after  { width:100%; height:2px; top:50%; transform:translateY(-50%); }
+
+    #intro { position:fixed; inset:0; background:#000; z-index:999; display:flex; flex-direction:column; justify-content:center; align-items:center; gap:24px; }
+    #intro.fade-out { animation:fadeOut 0.8s forwards; }
+    @keyframes fadeOut { to{opacity:0;pointer-events:none;} }
+    .intro-title { font-family:'Orbitron',monospace; font-size:clamp(2rem,6vw,3.8rem); font-weight:900; color:#ff6b6b; text-align:center; text-shadow:0 0 40px rgba(255,107,107,0.6); letter-spacing:4px; line-height:1.2; }
+    .intro-sub { color:#664444; font-size:0.85rem; letter-spacing:3px; text-align:center; max-width:440px; line-height:1.7; }
+    #start-btn { background:transparent; border:2px solid #ff6b6b; color:#ff6b6b; font-family:'Orbitron',monospace; font-weight:700; font-size:0.9rem; letter-spacing:4px; padding:16px 48px; cursor:pointer; border-radius:2px; transition:all 0.3s; margin-top:10px; }
+    #start-btn:hover { background:#ff6b6b; color:#000; box-shadow:0 0 40px rgba(255,107,107,0.53); }
+
+    #score-popup { position:fixed; top:80px; right:28px; z-index:150; display:none; background:#220000; border:1px solid rgba(255,107,107,0.4); color:#ff9999; font-size:0.8rem; padding:10px 20px; border-radius:3px; letter-spacing:1px; animation:popIn 0.3s ease; }
+    @keyframes popIn { from{transform:scale(0.8) translateY(-10px);opacity:0;} to{transform:scale(1);opacity:1;} }
+
+    #escape-counter { position:fixed; bottom:28px; left:50%; transform:translateX(-50%); z-index:150; display:none; align-items:center; gap:10px; background:rgba(20,0,0,0.88); border:1px solid rgba(255,107,107,0.2); padding:10px 24px; border-radius:4px; pointer-events:none; }
+    .counter-label { font-size:0.65rem; letter-spacing:3px; color:#664444; }
+    .counter-pips { display:flex; gap:8px; }
+    .pip { width:14px; height:14px; border-radius:50%; border:1.5px solid rgba(255,107,107,0.27); background:transparent; transition:all 0.4s; }
+    .pip.filled { background:#ff6b6b; border-color:#ff6b6b; box-shadow:0 0 10px #ff6b6b; }
+
+    #victory { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.96); z-index:500; flex-direction:column; justify-content:center; align-items:center; gap:20px; }
+    #victory.open { display:flex; }
+    .victory-title { font-family:'Orbitron',monospace; font-size:3rem; font-weight:900; color:#ff6b6b; text-shadow:0 0 60px #ff6b6b; animation:pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{text-shadow:0 0 60px #ff6b6b;} 50%{text-shadow:0 0 100px #ff6b6b,0 0 120px #ffaa00;} }
+    .victory-sub { color:#ffb3b3; font-size:1rem; letter-spacing:2px; text-align:center; }
+    .victory-score { color:#ffcc00; font-size:1.3rem; margin-top:10px; }
+    .victory-chain { display:flex; align-items:center; margin:10px 0; }
+    .v-node { width:36px; height:36px; border:2px solid #ff6b6b; border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:0.7rem; color:#ff6b6b; background:#1a0505; animation:nodeGlow 1.5s ease-in-out infinite alternate; }
+    @keyframes nodeGlow { from{box-shadow:0 0 4px #ff6b6b;} to{box-shadow:0 0 16px #ff6b6b;} }
+    .v-arrow { font-size:1.2rem; color:rgba(255,107,107,0.4); padding:0 4px; }
+    .victory-btns { display:flex; gap:16px; margin-top:20px; }
+    .victory-btn { background:none; border:2px solid #ff6b6b; color:#ff6b6b; font-family:'Orbitron',monospace; font-size:0.8rem; letter-spacing:3px; padding:14px 32px; cursor:pointer; border-radius:2px; transition:all 0.3s; }
+    .victory-btn:hover { background:#ff6b6b; color:#000; }
+    .victory-btn.secondary { border-color:#ffcc00; color:#ffcc00; }
+    .victory-btn.secondary:hover { background:#ffcc00; color:#000; }
+
+    #wasd-hint { position:fixed; bottom:28px; right:28px; z-index:150; color:rgba(255,107,107,0.35); font-size:0.65rem; letter-spacing:2px; pointer-events:none; text-align:right; line-height:1.8; }
+  </style>
+</head>
+<body>
+
+<div id="intro">
+  <div class="intro-title">DSA<br>ESCAPE ROOM</div>
+  <div class="intro-sub">ARRAYS &amp; ALGORITHMS — SOLVE ALL 3 NODE PUZZLES TO ESCAPE</div>
+  <button id="start-btn" onclick="startGame()">ENTER THE ROOM</button>
+</div>
+
+<div id="crosshair"></div>
+
+<div id="hud" style="display:none">
+  <div id="hud-title">◈ DSA ESCAPE ROOM</div>
+  <div id="hud-right">
+    <div class="hud-badge" id="room-name-badge">◈ ARRAY DUNGEON</div>
+    <div class="hud-badge" id="score-badge">SCORE: 0</div>
+    <div class="hud-badge" id="puzzle-count-badge">NODES: 0/3</div>
+  </div>
+</div>
+
+<div id="escape-counter">
+  <span class="counter-label">PUZZLES SOLVED</span>
+  <div class="counter-pips">
+    <div class="pip" id="pip-0"></div>
+    <div class="pip" id="pip-1"></div>
+    <div class="pip" id="pip-2"></div>
+  </div>
+  <span class="counter-label" id="counter-text">0 / 3</span>
+</div>
+
+<div id="score-popup"></div>
+<div id="wasd-hint">WASD — MOVE<br>MOUSE — LOOK<br>E — INTERACT</div>
+
+<div id="room-transition">
+  <div id="transition-text">ENTERING DUNGEON...</div>
+  <div id="transition-sub">LOADING NEXT AREA</div>
+</div>
+
+<div id="puzzle-modal">
+  <div id="monitor-assembly">
+    <div id="monitor-bezel">
+      <span id="monitor-brand">DSA·SYS</span>
+      <div id="monitor-screen">
+        <div id="screen-titlebar">
+          <div id="titlebar-dots">
+            <div class="tb-dot red" onclick="closePuzzle()"></div>
+            <div class="tb-dot yellow"></div>
+            <div class="tb-dot green"></div>
+          </div>
+          <div id="titlebar-name"><span id="titlebar-filename">dsa_terminal</span>.exe</div>
+        </div>
+        <div id="screen-content">
+          <div class="puzzle-tag" id="puzzle-tag">ARRAYS</div>
+          <div id="puzzle-title">Loading...</div>
+          <div id="puzzle-difficulty"></div>
+          <hr class="screen-divider">
+          <div id="puzzle-description"></div>
+          <pre id="puzzle-code-block"></pre>
+          <button id="hint-btn" onclick="showHint()">💡 SHOW HINT</button>
+          <div id="hint-text"></div>
+          <div class="options-grid" id="options-grid"></div>
+          <div id="puzzle-feedback"></div>
+          <button id="next-puzzle-btn" onclick="handleNextBtn()">CONTINUE →</button>
+        </div>
+      </div>
+    </div>
+    <div id="monitor-neck"></div>
+    <div id="monitor-base"></div>
+  </div>
+</div>
+
+<div id="victory">
+  <div class="victory-title">🏆 ESCAPED!</div>
+  <div class="victory-chain">
+    <div class="v-node">✓</div><div class="v-arrow">→</div>
+    <div class="v-node">✓</div><div class="v-arrow">→</div>
+    <div class="v-node">✓</div><div class="v-arrow">→</div>
+    <div class="v-node">NULL</div>
+  </div>
+  <div class="victory-sub">ALL PUZZLES SOLVED — YOU CLEARED THE DUNGEON</div>
+  <div class="victory-score" id="final-score"></div>
+  <div class="victory-btns">
+    <button class="victory-btn" onclick="location.reload()">PLAY AGAIN</button>
+    <button class="victory-btn secondary" onclick="goToLevels()">← LEVEL SELECT</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     A-FRAME SCENE — 100% procedural, no GLB files
+══════════════════════════════════════════════ -->
+<a-scene id="scene" style="display:none" vr-mode-ui="enabled:false" renderer="antialias:true">
+
+  <a-sky color="#060003"></a-sky>
+
+  <!-- FLOOR -->
+  <a-plane rotation="-90 0 0" width="40" height="40" color="#0d0005" material="roughness:1;metalness:0"></a-plane>
+
+  <!-- Floor grid -->
+  <a-plane rotation="-90 0 0" width="40" height="0.03" color="#ff2244" opacity="0.1" position="0 0.01 -8"></a-plane>
+  <a-plane rotation="-90 0 0" width="40" height="0.03" color="#ff2244" opacity="0.1" position="0 0.01 -4"></a-plane>
+  <a-plane rotation="-90 0 0" width="40" height="0.03" color="#ff2244" opacity="0.1" position="0 0.01  0"></a-plane>
+  <a-plane rotation="-90 0 0" width="40" height="0.03" color="#ff2244" opacity="0.1" position="0 0.01  4"></a-plane>
+  <a-plane rotation="-90 0 0" width="40" height="0.03" color="#ff2244" opacity="0.1" position="0 0.01  8"></a-plane>
+  <a-plane rotation="-90 90 0" width="40" height="0.03" color="#ff2244" opacity="0.1" position="-8 0.01 0"></a-plane>
+  <a-plane rotation="-90 90 0" width="40" height="0.03" color="#ff2244" opacity="0.1" position="-4 0.01 0"></a-plane>
+  <a-plane rotation="-90 90 0" width="40" height="0.03" color="#ff2244" opacity="0.1" position=" 0 0.01 0"></a-plane>
+  <a-plane rotation="-90 90 0" width="40" height="0.03" color="#ff2244" opacity="0.1" position=" 4 0.01 0"></a-plane>
+  <a-plane rotation="-90 90 0" width="40" height="0.03" color="#ff2244" opacity="0.1" position=" 8 0.01 0"></a-plane>
+
+  <!-- CEILING -->
+  <a-plane rotation="90 0 0" width="40" height="40" position="0 5 0" color="#060003" material="roughness:1"></a-plane>
+
+  <!-- WALLS -->
+  <a-plane rotation="0 0 0"   width="40" height="5" position="0 2.5 -15" color="#0d0008" material="roughness:1"></a-plane>
+  <a-plane rotation="0 180 0" width="40" height="5" position="0 2.5  15" color="#0d0008" material="roughness:1"></a-plane>
+  <a-plane rotation="0 90 0"  width="30" height="5" position="-15 2.5 0" color="#0b0006" material="roughness:1"></a-plane>
+  <a-plane rotation="0 -90 0" width="30" height="5" position=" 15 2.5 0" color="#0b0006" material="roughness:1"></a-plane>
+
+  <!-- Wall glow strips -->
+  <a-plane rotation="0 0 0"   width="40" height="0.06" position="0 0.4 -14.9" color="#ff2244" opacity="0.6"></a-plane>
+  <a-plane rotation="0 0 0"   width="40" height="0.06" position="0 4.9 -14.9" color="#ff2244" opacity="0.3"></a-plane>
+  <a-plane rotation="0 180 0" width="40" height="0.06" position="0 0.4  14.9" color="#ff2244" opacity="0.3"></a-plane>
+  <a-plane rotation="0 90 0"  width="30" height="0.06" position="-14.9 0.4 0" color="#ff2244" opacity="0.3"></a-plane>
+  <a-plane rotation="0 -90 0" width="30" height="0.06" position=" 14.9 0.4 0" color="#ff2244" opacity="0.3"></a-plane>
+
+  <!-- PILLARS -->
+  <a-box width="0.7" depth="0.7" height="5" position="-6 2.5 -6"  color="#110007" material="roughness:1"></a-box>
+  <a-box width="0.7" depth="0.7" height="5" position=" 6 2.5 -6"  color="#110007" material="roughness:1"></a-box>
+  <a-box width="0.7" depth="0.7" height="5" position="-6 2.5  5"  color="#110007" material="roughness:1"></a-box>
+  <a-box width="0.7" depth="0.7" height="5" position=" 6 2.5  5"  color="#110007" material="roughness:1"></a-box>
+  <!-- Pillar edge glow -->
+  <a-box width="0.04" depth="0.04" height="5" position="-5.67 2.5 -5.67" color="#ff2244" opacity="0.5"></a-box>
+  <a-box width="0.04" depth="0.04" height="5" position=" 5.67 2.5 -5.67" color="#ff2244" opacity="0.5"></a-box>
+  <a-box width="0.04" depth="0.04" height="5" position="-5.67 2.5  4.67" color="#ff2244" opacity="0.5"></a-box>
+  <a-box width="0.04" depth="0.04" height="5" position=" 5.67 2.5  4.67" color="#ff2244" opacity="0.5"></a-box>
+
+  <!-- Back wall array display -->
+  <a-text value="[ 2 | 7 | 11 | 15 | 23 | 42 ]" align="center" color="#ff6b6b" opacity="0.3" scale="1.3 1.3 1.3" position="0 3.3 -14.8"></a-text>
+  <a-text value="  0   1    2    3    4    5  "   align="center" color="#ff6b6b" opacity="0.15" scale="1.0 1.0 1.0" position="0 2.7 -14.8"></a-text>
+
+  <!-- ═══ PUZZLE NODE 0 — (-3, 0, -1) ═══ -->
+  <a-entity id="node-zone-0" position="-3 0 -1">
+    <a-cylinder height="0.15" radius="0.42" color="#1a0008" position="0 0.075 0"></a-cylinder>
+    <a-cylinder height="0.04" radius="0.48" color="#ff6b6b" opacity="0.5" position="0 0.15 0"></a-cylinder>
+    <a-box width="0.42" height="0.42" depth="0.42" color="#ff6b6b" opacity="0.9" position="0 0.78 0"
+      material="roughness:0.2;metalness:0.8"
+      animation="property:rotation;from:0 0 0;to:0 360 0;loop:true;dur:4000;easing:linear"
+      animation__pulse="property:scale;from:1 1 1;to:1.3 1.3 1.3;loop:true;dur:800;dir:alternate;easing:easeInOutSine">
+    </a-box>
+    <a-torus radius="0.38" radius-tubular="0.025" color="#ff6b6b" opacity="0.7" position="0 0.2 0" rotation="90 0 0"
+      animation="property:rotation;from:90 0 0;to:90 360 0;loop:true;dur:3000;easing:linear"></a-torus>
+    <a-light type="point" color="#ff4444" intensity="1.0" distance="6" position="0 1 0"></a-light>
+    <a-entity id="node-hint-0" position="0 2.0 0" visible="false">
+      <a-plane width="2.0" height="0.38" color="#1a0000" opacity="0.96" position="0 0 -0.01" side="double"></a-plane>
+      <a-text value="[ E ]  PUZZLE 1 — ARRAYS" align="center" color="#ff6b6b" scale="0.54 0.54 0.54"></a-text>
+    </a-entity>
+    <a-text value="01" align="center" color="#ff6b6b" opacity="0.8" scale="0.9 0.9 0.9" position="0 1.6 0"></a-text>
+  </a-entity>
+
+  <!-- ═══ PUZZLE NODE 1 — (3.89, 0, 4.57) ═══ -->
+  <a-entity id="node-zone-1" position="3.89 0 4.57">
+    <a-cylinder height="0.15" radius="0.42" color="#1a0800" position="0 0.075 0"></a-cylinder>
+    <a-cylinder height="0.04" radius="0.48" color="#ff9f43" opacity="0.5" position="0 0.15 0"></a-cylinder>
+    <a-box width="0.42" height="0.42" depth="0.42" color="#ff9f43" opacity="0.9" position="0 0.78 0"
+      material="roughness:0.2;metalness:0.8"
+      animation="property:rotation;from:0 0 0;to:0 360 0;loop:true;dur:3000;easing:linear"
+      animation__pulse="property:scale;from:1 1 1;to:1.3 1.3 1.3;loop:true;dur:1000;dir:alternate;easing:easeInOutSine">
+    </a-box>
+    <a-torus radius="0.38" radius-tubular="0.025" color="#ff9f43" opacity="0.7" position="0 0.2 0" rotation="90 0 0"
+      animation="property:rotation;from:90 0 0;to:90 360 0;loop:true;dur:2500;easing:linear"></a-torus>
+    <a-light type="point" color="#ff9933" intensity="1.0" distance="6" position="0 1 0"></a-light>
+    <a-entity id="node-hint-1" position="0 2.0 0" visible="false">
+      <a-plane width="2.0" height="0.38" color="#1a0800" opacity="0.96" position="0 0 -0.01" side="double"></a-plane>
+      <a-text value="[ E ]  PUZZLE 2 — SORTING" align="center" color="#ff9f43" scale="0.54 0.54 0.54"></a-text>
+    </a-entity>
+    <a-text value="02" align="center" color="#ff9f43" opacity="0.8" scale="0.9 0.9 0.9" position="0 1.6 0"></a-text>
+  </a-entity>
+
+  <!-- ═══ PUZZLE NODE 2 — (-8.10, 0, 6.94) ═══ -->
+  <a-entity id="node-zone-2" position="-8.10 0 6.94">
+    <a-cylinder height="0.15" radius="0.42" color="#1a1000" position="0 0.075 0"></a-cylinder>
+    <a-cylinder height="0.04" radius="0.48" color="#ffd32a" opacity="0.5" position="0 0.15 0"></a-cylinder>
+    <a-box width="0.42" height="0.42" depth="0.42" color="#ffd32a" opacity="0.9" position="0 0.78 0"
+      material="roughness:0.2;metalness:0.8"
+      animation="property:rotation;from:0 0 0;to:0 360 0;loop:true;dur:2500;easing:linear"
+      animation__pulse="property:scale;from:1 1 1;to:1.3 1.3 1.3;loop:true;dur:600;dir:alternate;easing:easeInOutSine">
+    </a-box>
+    <a-torus radius="0.38" radius-tubular="0.025" color="#ffd32a" opacity="0.7" position="0 0.2 0" rotation="90 0 0"
+      animation="property:rotation;from:90 0 0;to:90 360 0;loop:true;dur:2000;easing:linear"></a-torus>
+    <a-light type="point" color="#ffdd00" intensity="1.0" distance="6" position="0 1 0"></a-light>
+    <a-entity id="node-hint-2" position="0 2.0 0" visible="false">
+      <a-plane width="2.2" height="0.38" color="#1a1000" opacity="0.96" position="0 0 -0.01" side="double"></a-plane>
+      <a-text value="[ E ]  PUZZLE 3 — ESCAPE!" align="center" color="#ffd32a" scale="0.54 0.54 0.54"></a-text>
+    </a-entity>
+    <a-text value="03" align="center" color="#ffd32a" opacity="0.8" scale="0.9 0.9 0.9" position="0 1.6 0"></a-text>
+  </a-entity>
+
+  <!-- NULL terminus -->
+  <a-text value="→  NULL" align="center" color="#ff6b6b" opacity="0.1" scale="3 3 3" position="0 1.5 -14"></a-text>
+
+  <!-- Ceiling light fixtures -->
+  <a-cylinder height="0.06" radius="0.28" color="#ff2233" opacity="0.9" position=" 0  4.97  0"></a-cylinder>
+  <a-cylinder height="0.06" radius="0.28" color="#ff3322" opacity="0.9" position="-6  4.97 -6"></a-cylinder>
+  <a-cylinder height="0.06" radius="0.28" color="#ff3322" opacity="0.9" position=" 6  4.97 -6"></a-cylinder>
+  <a-cylinder height="0.06" radius="0.28" color="#ff7700" opacity="0.9" position=" 4  4.97  5"></a-cylinder>
+  <a-cylinder height="0.06" radius="0.28" color="#ffbb00" opacity="0.9" position="-8  4.97  7"></a-cylinder>
+
+  <!-- Lighting -->
+  <a-light type="ambient" color="#3a0a0a" intensity="2.0"></a-light>
+  <a-light type="point" position=" 0  4.5  0"   color="#ff2233" intensity="0.7" distance="20"></a-light>
+  <a-light type="point" position="-6  4.5 -6"   color="#ff4444" intensity="0.5" distance="12"></a-light>
+  <a-light type="point" position=" 6  4.5 -6"   color="#ff4444" intensity="0.5" distance="12"></a-light>
+  <a-light type="point" position=" 4  4.5  5"   color="#ff8833" intensity="0.5" distance="12"></a-light>
+  <a-light type="point" position="-8  4.5  7"   color="#ffaa00" intensity="0.5" distance="12"></a-light>
+
+  <!-- Player -->
+  <a-entity id="rig" position="0 0 2">
+    <a-camera look-controls wasd-controls="acceleration:20" position="0 1.6 0">
+      <a-cursor fuse="false" color="#ff6b6b" raycaster="objects:.clickable"></a-cursor>
+    </a-camera>
+  </a-entity>
+
+</a-scene>
+
+<script>
+const ARRAY_PUZZLES = [
+  {
+    tag:"ARRAY OPERATIONS", title:"Two Sum Problem", difficulty:"MEDIUM",
+    description:"Given the array [2, 7, 11, 15] and a target of 9, which two indices hold values that add up to the target?",
+    code:`arr = [2, 7, 11, 15]\ntarget = 9\n\n# Find i, j such that arr[i] + arr[j] == target`,
+    hint:"Check which two elements sum to 9. Remember: 2 + 7 = 9.",
+    options:["indices [0] and [1]","indices [1] and [2]","indices [0] and [2]","indices [2] and [3]"],
+    answer:0, explanation:"✓ Correct! arr[0]=2 and arr[1]=7. 2+7=9. Answer: indices 0 and 1.", points:200
+  },
+  {
+  tag: "ARRAY INDEXING", title: "Predict the Output", difficulty: "MEDIUM", 
+    description: "What will be the output of the following code?", 
+    code: `int arr[] = {10, 20, 30, 40, 50}; printf("%d", 2[arr]);`, 
+    hint: "arr + 3 points to the 4th element.", 
+    options: [ "30", "40", "50", "Error" ], 
+    answer: 1, 
+    explanation: "✓ Correct! *(arr + 3) accesses the element at index 3 → 4.", 
+    points: 200
+  },
+  {
+    tag:"TWO POINTERS", title:"Array Palindrome Check", difficulty:"EASY",
+    description:"Using the two-pointer technique, is [1, 2, 3, 2, 1] a palindrome? Which pair is checked LAST?",
+    code:`arr = [1, 2, 3, 2, 1]\nleft = 0, right = 4\n\nPass 1: arr[0]=1 == arr[4]=1 ✓  left→1, right→3\nPass 2: arr[1]=2 == arr[3]=2 ✓  left→2, right→2\nPass 3: left >= right → DONE`,
+    hint:"Two pointers move inward. The last pair before crossing is Pass 2.",
+    options:["arr[0] and arr[4]","arr[1] and arr[3]","arr[2] and arr[2]","arr[0] and arr[3]"],
+    answer:1, explanation:"✓ Correct! Last comparison: arr[1]=2 vs arr[3]=2 before pointers cross.", points:200
+  }
+];
+
+const TOTAL_PUZZLES=3; let totalScore=0,solvedCount=0,puzzleActive=false,nearNode=-1;
+const nodeSolved=[false,false,false]; let nextBtnAction=null;
+const NODE_ZONES=[{x:-3,z:-1},{x:3.89,z:4.57},{x:-8.10,z:6.94}];
+const NODE_DIST=2.2;
+
+function startGame(){
+  document.getElementById('intro').classList.add('fade-out');
+  setTimeout(()=>document.getElementById('intro').style.display='none',800);
+  document.getElementById('hud').style.display='flex';
+  document.getElementById('escape-counter').style.display='flex';
+  const sceneEl=document.getElementById('scene');
+  sceneEl.style.display='';
+  const overlay=document.getElementById('room-transition');
+  overlay.classList.add('active');
+  setTimeout(()=>overlay.classList.remove('active'),2200);
+  if(sceneEl.hasLoaded) startProximityLoop();
+  else sceneEl.addEventListener('loaded',startProximityLoop,{once:true});
+}
+
+window.addEventListener('keydown',e=>{
+  if(puzzleActive) return;
+  if((e.key==='e'||e.key==='E')&&nearNode>=0&&!nodeSolved[nearNode]) openNodePuzzle(nearNode);
+});
+
+function getPlayerPos(){
+  const cam=document.querySelector('a-camera');
+  if(cam&&cam.object3D){const wp=new THREE.Vector3();cam.object3D.getWorldPosition(wp);return wp;}
+  const rig=document.getElementById('rig');
+  return rig&&rig.object3D?rig.object3D.position:null;
+}
+
+function startProximityLoop(){
+  setInterval(()=>{
+    if(puzzleActive) return;
+    const p=getPlayerPos(); if(!p) return;
+    let foundIdx=-1;
+    NODE_ZONES.forEach((nz,i)=>{
+      const hint=document.getElementById(`node-hint-${i}`);
+      if(nodeSolved[i]){if(hint)hint.setAttribute('visible',false);return;}
+      const dist=Math.hypot(p.x-nz.x,p.z-nz.z);
+      if(dist<NODE_DIST){foundIdx=i;if(hint)hint.setAttribute('visible',true);}
+      else{if(hint)hint.setAttribute('visible',false);}
+    });
+    if(foundIdx!==nearNode){
+      nearNode=foundIdx;
+      if(foundIdx>=0&&!nodeSolved[foundIdx]) showToast(`Near Node ${foundIdx+1} — Press [E] to interact`);
+      else hideToast();
+    }
+  },150);
+}
+
+function openNodePuzzle(idx){
+  puzzleActive=true; hideToast();
+  populateModal(ARRAY_PUZZLES[idx],`node_puzzle_${idx+1}`);
+  document.querySelectorAll('.option-btn').forEach((btn,i)=>{btn.onclick=()=>checkAnswer(i,idx,btn);});
+  document.getElementById('puzzle-modal').classList.add('open');
+  document.getElementById('screen-content').scrollTop=0;
+}
+
+function checkAnswer(chosen,nodeIdx,btnEl){
+  if(!puzzleActive) return;
+  const puzzle=ARRAY_PUZZLES[nodeIdx];
+  document.querySelectorAll('.option-btn').forEach(b=>b.style.pointerEvents='none');
+  const feedback=document.getElementById('puzzle-feedback');
+  if(chosen===puzzle.answer){
+    btnEl.classList.add('correct');
+    feedback.className='success'; feedback.textContent=puzzle.explanation; feedback.style.display='block';
+    totalScore+=puzzle.points;
+    document.getElementById('score-badge').textContent=`SCORE: ${totalScore}`;
+    showScorePopup(`+${puzzle.points} PTS ✓`);
+    nodeSolved[nodeIdx]=true; solvedCount++;
+    const zone=document.getElementById(`node-zone-${nodeIdx}`);
+    if(zone){
+      const box=zone.querySelector('a-box');
+      if(box){box.setAttribute('color','#226644');box.setAttribute('opacity','0.3');}
+      const torus=zone.querySelector('a-torus');
+      if(torus) torus.setAttribute('color','#226644');
+    }
+    updateProgress(); puzzleActive=false;
+    setTimeout(()=>{
+      const btn=document.getElementById('next-puzzle-btn');
+      const isLast=solvedCount>=TOTAL_PUZZLES;
+      btn.textContent=isLast?'🏆 ESCAPE!':'CLOSE ✓';
+      nextBtnAction=()=>{closePuzzle();if(isLast)setTimeout(showVictory,600);};
+      btn.style.display='block';
+    },1000);
+  } else {
+    btnEl.classList.add('wrong');
+    document.querySelectorAll('.option-btn')[puzzle.answer].classList.add('correct');
+    feedback.className='fail'; feedback.textContent=`✗ Incorrect. Correct: ${puzzle.options[puzzle.answer]}`; feedback.style.display='block';
+    puzzleActive=false;
+    setTimeout(()=>{const btn=document.getElementById('next-puzzle-btn');btn.textContent='TRY AGAIN';nextBtnAction=closePuzzle;btn.style.display='block';},800);
+  }
+}
+
+function handleNextBtn(){if(nextBtnAction)nextBtnAction();}
+
+function updateProgress(){
+  for(let i=0;i<TOTAL_PUZZLES;i++) document.getElementById(`pip-${i}`)?.classList.toggle('filled',i<solvedCount);
+  document.getElementById('counter-text').textContent=`${solvedCount} / ${TOTAL_PUZZLES}`;
+  document.getElementById('puzzle-count-badge').textContent=`NODES: ${solvedCount}/${TOTAL_PUZZLES}`;
+}
+
+function showVictory(){
+  document.getElementById('final-score').textContent=`FINAL SCORE: ${totalScore} PTS`;
+  document.getElementById('victory').classList.add('open');
+}
+function goToLevels(){
+  document.body.style.transition='opacity .6s'; document.body.style.opacity='0';
+  setTimeout(()=>window.location.href='/level',650);
+}
+function populateModal(puzzle,filename){
+  document.getElementById('titlebar-filename').textContent=filename;
+  document.getElementById('puzzle-tag').textContent=puzzle.tag;
+  document.getElementById('puzzle-title').textContent=puzzle.title;
+  const cls={EASY:'diff-easy',MEDIUM:'diff-medium',HARD:'diff-hard'}[puzzle.difficulty];
+  document.getElementById('puzzle-difficulty').innerHTML=`<span class="${cls}">◆ ${puzzle.difficulty}</span>`;
+  document.getElementById('puzzle-description').textContent=puzzle.description;
+  document.getElementById('puzzle-code-block').textContent=puzzle.code;
+  document.getElementById('hint-text').style.display='none';
+  document.getElementById('hint-text').textContent='💡 '+puzzle.hint;
+  document.getElementById('puzzle-feedback').className='';
+  document.getElementById('puzzle-feedback').style.display='none';
+  document.getElementById('next-puzzle-btn').style.display='none';
+  nextBtnAction=null;
+  const grid=document.getElementById('options-grid'); grid.innerHTML='';
+  puzzle.options.forEach((opt,i)=>{
+    const btn=document.createElement('button'); btn.className='option-btn';
+    btn.textContent=`${'ABCD'[i]}.  ${opt}`; grid.appendChild(btn);
+  });
+}
+function closePuzzle(){document.getElementById('puzzle-modal').classList.remove('open');puzzleActive=false;}
+function showHint(){document.getElementById('hint-text').style.display='block';}
+function showScorePopup(msg){const p=document.getElementById('score-popup');p.textContent=msg;p.style.display='block';setTimeout(()=>p.style.display='none',2000);}
+function showToast(msg){
+  let t=document.getElementById('proximity-toast');
+  if(!t){t=document.createElement('div');t.id='proximity-toast';t.style.cssText=`position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#1a0000;border:1px solid rgba(255,107,107,0.53);color:#ff9999;font-family:'Share Tech Mono',monospace;font-size:0.85rem;letter-spacing:2px;padding:12px 28px;border-radius:3px;z-index:150;pointer-events:none;`;document.body.appendChild(t);}
+  t.textContent=msg;t.style.display='block';
+}
+function hideToast(){const t=document.getElementById('proximity-toast');if(t)t.style.display='none';}
+</script>
+</body>
+</html>

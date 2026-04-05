@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>HashMap Escape Room</title>
+  <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap');
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Share Tech Mono', monospace; background: #000; overflow: hidden; }
+
+    /* ── HUD ── */
+    #hud { position: fixed; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; align-items: center; padding: 16px 28px; background: linear-gradient(180deg, rgba(0,0,0,0.88) 0%, transparent 100%); z-index: 100; pointer-events: none; }
+    #hud-title { font-family: 'Orbitron', monospace; font-size: 1.1rem; font-weight: 900; color: #a78bfa; letter-spacing: 3px; text-shadow: 0 0 20px #a78bfa88; }
+    #hud-right { display: flex; gap: 24px; align-items: center; }
+    .hud-badge { font-size: 0.75rem; color: #d8b4fe; letter-spacing: 2px; border: 1px solid #a78bfa44; padding: 6px 14px; border-radius: 2px; background: rgba(167,139,250,0.06); }
+    #room-name-badge { font-family: 'Orbitron', monospace; color: #f0abfc; border-color: #f0abfc44; background: rgba(240,171,252,0.06); text-shadow: 0 0 10px #f0abfc66; }
+    #timer-badge { font-family: 'Orbitron', monospace; }
+
+
+    /* ── Puzzle Modal ── */
+    #puzzle-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.96); z-index: 200; justify-content: center; align-items: center; }
+    #puzzle-modal.open { display: flex; }
+    #monitor-assembly { display: flex; flex-direction: column; align-items: center; animation: monitorPowerOn 0.4s ease; }
+    @keyframes monitorPowerOn { 0% { opacity:0; transform:scale(0.94) translateY(20px); filter:brightness(3); } 60% { opacity:1; filter:brightness(1.3); } 100% { transform:scale(1) translateY(0); filter:brightness(1); } }
+    #monitor-bezel { background: linear-gradient(160deg, #1a1028 0%, #110c1e 40%, #0a0814 100%); border-radius: 12px 12px 4px 4px; padding: 18px 18px 22px; box-shadow: 0 0 0 1px #1a0a2a, 0 0 0 2px #2a1540, 4px 4px 20px rgba(0,0,0,0.8), inset 0 1px 0 rgba(180,150,255,0.08), inset 0 -2px 6px rgba(0,0,0,0.6); width: min(760px, 94vw); position: relative; }
+    #monitor-bezel::after { content: ''; position: absolute; bottom: 10px; right: 22px; width: 7px; height: 7px; border-radius: 50%; background: #a78bfa; box-shadow: 0 0 6px #a78bfa, 0 0 12px #a78bfa66; animation: ledBlink 3s ease-in-out infinite; }
+    @keyframes ledBlink { 0%,90%,100% { opacity:1; } 95% { opacity:0.3; } }
+    #monitor-brand { position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); font-family: 'Orbitron', monospace; font-size: 0.55rem; color: #2a1a44; letter-spacing: 4px; }
+    #monitor-screen { background: #07040f; border-radius: 4px; overflow: hidden; position: relative; border: 2px solid #1a0a2a; box-shadow: inset 0 0 60px rgba(20,0,40,0.9), inset 0 0 120px rgba(167,139,250,0.03), 0 0 30px rgba(167,139,250,0.08); }
+    #monitor-screen::before { content: ''; position: absolute; inset: 0; z-index: 100; pointer-events: none; background: repeating-linear-gradient(0deg, transparent 0px, transparent 2px, rgba(0,0,0,0.18) 2px, rgba(0,0,0,0.18) 3px); }
+    #monitor-screen::after { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 35%; z-index: 101; pointer-events: none; background: linear-gradient(180deg, rgba(167,100,255,0.04) 0%, rgba(255,255,255,0.01) 50%, transparent 100%); border-radius: 4px 4px 0 0; }
+    #screen-titlebar { background: linear-gradient(90deg, #0d0818 0%, #120d22 50%, #0d0818 100%); border-bottom: 1px solid #a78bfa22; padding: 0; display: flex; align-items: stretch; height: 36px; position: relative; z-index: 10; }
+    #titlebar-dots { display: flex; align-items: center; gap: 7px; padding: 0 14px; border-right: 1px solid #a78bfa11; }
+    .tb-dot { width: 12px; height: 12px; border-radius: 50%; cursor: pointer; transition: filter 0.15s; }
+    .tb-dot:hover { filter: brightness(1.3); }
+    .tb-dot.red    { background: radial-gradient(circle at 35% 35%, #ff7070, #cc3333); box-shadow: 0 0 4px #cc333366; }
+    .tb-dot.yellow { background: radial-gradient(circle at 35% 35%, #ffdd70, #ccaa00); box-shadow: 0 0 4px #ccaa0066; }
+    .tb-dot.green  { background: radial-gradient(circle at 35% 35%, #70ff99, #00aa44); box-shadow: 0 0 4px #00aa4466; }
+    #titlebar-name { flex:1; display:flex; align-items:center; justify-content:center; font-size:0.65rem; color:#3a2255; letter-spacing:2px; }
+    #titlebar-name span { color: #7755aa; }
+    #titlebar-right { display:flex; align-items:center; padding:0 12px; gap:10px; border-left:1px solid #a78bfa11; font-size:0.6rem; color:#2a1840; }
+    #screen-content { padding: 20px 24px 24px; max-height: calc(80vh - 36px); overflow-y: auto; position: relative; z-index: 10; color: #e9d5ff; }
+    #screen-content::-webkit-scrollbar { width: 6px; }
+    #screen-content::-webkit-scrollbar-track { background: #07040f; }
+    #screen-content::-webkit-scrollbar-thumb { background: #a78bfa33; border-radius: 3px; }
+    .puzzle-tag { font-size:0.6rem; letter-spacing:4px; color:#a78bfa88; margin-bottom:10px; display:flex; align-items:center; gap:6px; }
+    .puzzle-tag::before { content:'▸▸'; color:#a78bfa44; }
+    #puzzle-title { font-family:'Orbitron',monospace; font-size:1.2rem; font-weight:700; color:#f3e8ff; margin-bottom:6px; line-height:1.3; text-shadow:0 0 20px rgba(167,139,250,0.2); }
+    #puzzle-difficulty { font-size:0.68rem; letter-spacing:2px; margin-bottom:18px; }
+    .diff-easy   { color:#00ff99; text-shadow:0 0 8px #00ff9944; }
+    .diff-medium { color:#ffaa00; text-shadow:0 0 8px #ffaa0044; }
+    .diff-hard   { color:#f0abfc; text-shadow:0 0 8px #f0abfc44; }
+    .screen-divider { border:none; border-top:1px solid #a78bfa18; margin:0 0 16px 0; }
+    #puzzle-description { color:#c4b5fd; font-size:0.84rem; line-height:1.75; margin-bottom:16px; padding:10px 12px; background:rgba(167,139,250,0.025); border-left:2px solid #a78bfa33; border-radius:0 3px 3px 0; }
+    #puzzle-code-block { background:#050310; border:1px solid #120a22; border-top:2px solid #a78bfa22; border-radius:3px; padding:14px 16px; margin-bottom:16px; font-size:0.8rem; color:#c4b5fd; white-space:pre; overflow-x:auto; line-height:1.65; position:relative; }
+    #puzzle-code-block::before { content:'CODE'; position:absolute; top:-9px; left:10px; background:#050310; padding:0 6px; font-size:0.52rem; color:#a78bfa44; letter-spacing:3px; }
+    #hint-btn { background:none; border:1px solid #ffcc0022; color:#ffcc0044; font-family:'Share Tech Mono',monospace; font-size:0.68rem; letter-spacing:2px; padding:6px 14px; cursor:pointer; border-radius:2px; margin-bottom:14px; transition:all 0.2s; display:block; }
+    #hint-btn:hover { border-color:#ffcc00aa; color:#ffcc00; background:rgba(255,204,0,0.05); }
+    #hint-text { display:none; color:#ffcc0077; font-size:0.76rem; margin-bottom:14px; padding:8px 12px; background:rgba(255,204,0,0.04); border-left:2px solid #ffcc0033; border-radius:0 3px 3px 0; }
+    .options-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:16px; }
+    .option-btn { background:rgba(10,5,20,0.8); border:1px solid #1a0d2a; color:#c4b5fd; font-family:'Share Tech Mono',monospace; font-size:0.79rem; padding:12px 14px; border-radius:3px; cursor:pointer; text-align:left; transition:all 0.18s; position:relative; overflow:hidden; }
+    .option-btn::before { content:''; position:absolute; left:0; top:0; bottom:0; width:2px; background:#a78bfa; opacity:0; transition:opacity 0.15s; }
+    .option-btn:hover { border-color:#a78bfa44; color:#e9d5ff; background:rgba(167,139,250,0.05); }
+    .option-btn:hover::before { opacity:1; }
+    .option-btn.correct { background:rgba(0,40,25,0.9); border-color:#00ff9966; color:#00ff99; box-shadow:0 0 12px rgba(0,255,150,0.1); }
+    .option-btn.correct::before { opacity:1; background:#00ff99; }
+    .option-btn.wrong { background:rgba(20,0,30,0.9); border-color:#ff446655; color:#ff7799; }
+    #puzzle-feedback { font-size:0.8rem; margin-bottom:14px; padding:11px 14px; border-radius:3px; display:none; line-height:1.55; }
+    #puzzle-feedback.success { background:rgba(0,30,18,0.9); border:1px solid #00ff9933; border-left:3px solid #00ff99; color:#88ffcc; display:block; }
+    #puzzle-feedback.fail    { background:rgba(20,0,30,0.9); border:1px solid #ff446633; border-left:3px solid #ff4466; color:#ff9ab0; display:block; }
+    #next-puzzle-btn { display:none; background:transparent; border:1px solid #a78bfa66; color:#a78bfa; font-family:'Share Tech Mono',monospace; font-size:0.75rem; letter-spacing:3px; padding:11px 26px; cursor:pointer; border-radius:2px; margin-top:4px; transition:all 0.2s; }
+    #next-puzzle-btn:hover { background:rgba(167,139,250,0.08); border-color:#a78bfa; color:#fff; box-shadow:0 0 16px rgba(167,139,250,0.2); }
+    #monitor-neck { width:50px; height:16px; background:linear-gradient(90deg,#0d0818,#150d28,#0d0818); clip-path:polygon(20% 0%,80% 0%,90% 100%,10% 100%); }
+    #monitor-base { width:180px; height:10px; background:linear-gradient(180deg,#150d28,#0d0818); border-radius:0 0 8px 8px; box-shadow:0 4px 12px rgba(0,0,0,0.6); }
+
+    /* ── Room Transition ── */
+    #room-transition { display:none; position:fixed; inset:0; z-index:300; background:#000; justify-content:center; align-items:center; flex-direction:column; gap:16px; }
+    #room-transition.active { display:flex; animation:fadeInOut 2.2s forwards; }
+    @keyframes fadeInOut { 0%{opacity:0;} 25%{opacity:1;} 75%{opacity:1;} 100%{opacity:0;pointer-events:none;} }
+    #transition-text { font-family:'Orbitron',monospace; font-size:1.4rem; font-weight:700; color:#a78bfa; letter-spacing:4px; text-align:center; text-shadow:0 0 30px #a78bfa; }
+    #transition-sub { color:#2a1844; font-size:0.75rem; letter-spacing:3px; }
+
+    /* ── Crosshair ── */
+    #crosshair { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); width:20px; height:20px; pointer-events:none; z-index:50; }
+    #crosshair::before, #crosshair::after { content:''; position:absolute; background:rgba(180,150,255,0.7); border-radius:1px; }
+    #crosshair::before { width:2px; height:100%; left:50%; transform:translateX(-50%); }
+    #crosshair::after  { width:100%; height:2px; top:50%; transform:translateY(-50%); }
+
+    /* ── Intro ── */
+    #intro { position:fixed; inset:0; background:#000; z-index:999; display:flex; flex-direction:column; justify-content:center; align-items:center; gap:24px; }
+    #intro.fade-out { animation:fadeOut 0.8s forwards; }
+    @keyframes fadeOut { to { opacity:0; pointer-events:none; } }
+    .intro-title { font-family:'Orbitron',monospace; font-size:clamp(2rem,6vw,3.8rem); font-weight:900; color:#a78bfa; text-align:center; text-shadow:0 0 40px #a78bfa99; letter-spacing:4px; line-height:1.2; }
+    .intro-subtitle { color:#a78bfa; font-family:'Orbitron',monospace; font-size:clamp(0.9rem,2.5vw,1.2rem); letter-spacing:6px; text-align:center; opacity:0.6; }
+    .intro-sub { color:#2a1844; font-size:0.85rem; letter-spacing:3px; text-align:center; max-width:440px; line-height:1.7; }
+    .intro-hashmap { display:grid; grid-template-columns:auto auto auto; gap:0; margin:8px 0; font-size:0.72rem; }
+    .hm-bucket { border:1px solid #a78bfa33; padding:6px 10px; color:#6644aa; background:#0d0818; text-align:center; }
+    .hm-bucket.active { border-color:#a78bfa88; color:#c4b5fd; background:#150d28; }
+    .hm-key { border:1px solid #a78bfa22; padding:6px 14px; color:#7755bb; background:#0d0818; border-left:none; }
+    .hm-val { border:1px solid #a78bfa22; padding:6px 14px; color:#9977cc; background:#0d0818; border-left:none; }
+    #start-btn { background:transparent; border:2px solid #a78bfa; color:#a78bfa; font-family:'Orbitron',monospace; font-weight:700; font-size:0.9rem; letter-spacing:4px; padding:16px 48px; cursor:pointer; border-radius:2px; transition:all 0.3s; margin-top:10px; }
+    #start-btn:hover { background:#a78bfa; color:#000; box-shadow:0 0 40px #a78bfa88; }
+
+    /* ── Score popup ── */
+    #score-popup { position:fixed; top:80px; right:28px; z-index:150; display:none; background:#0d0520; border:1px solid #a78bfa66; color:#c4b5fd; font-size:0.8rem; padding:10px 20px; border-radius:3px; letter-spacing:1px; animation:popIn 0.3s ease; }
+    @keyframes popIn { from{transform:scale(0.8) translateY(-10px);opacity:0;} to{transform:scale(1);opacity:1;} }
+
+    /* ── Progress counter ── */
+    #escape-counter { position:fixed; bottom:28px; left:50%; transform:translateX(-50%); z-index:150; display:flex; align-items:center; gap:10px; background:rgba(10,5,20,0.88); border:1px solid #a78bfa33; padding:10px 24px; border-radius:4px; pointer-events:none; }
+    .counter-label { font-size:0.65rem; letter-spacing:3px; color:#2a1844; }
+    .counter-pips { display:flex; gap:8px; }
+    .pip { width:14px; height:14px; border-radius:3px; border:1.5px solid #a78bfa44; background:transparent; transition:all 0.4s; transform:rotate(45deg); }
+    .pip.filled { background:#a78bfa; border-color:#a78bfa; box-shadow:0 0 10px #a78bfa; }
+
+    /* ── Victory ── */
+    #victory { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.96); z-index:500; flex-direction:column; justify-content:center; align-items:center; gap:20px; }
+    #victory.open { display:flex; }
+    .victory-title { font-family:'Orbitron',monospace; font-size:3rem; font-weight:900; color:#a78bfa; text-shadow:0 0 60px #a78bfa; animation:pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{text-shadow:0 0 60px #a78bfa;} 50%{text-shadow:0 0 100px #a78bfa,0 0 120px #f0abfc;} }
+    .victory-sub { color:#c4b5fd; font-size:1rem; letter-spacing:2px; text-align:center; }
+    .victory-score { color:#ffcc00; font-size:1.3rem; margin-top:10px; }
+    .victory-hashmap { display:grid; grid-template-columns:auto auto auto; gap:0; margin:10px 0; font-size:0.72rem; }
+    .vh-bucket { border:2px solid #a78bfa; padding:8px 12px; color:#a78bfa; background:#0d0818; text-align:center; animation:bucketGlow 1.5s ease-in-out infinite alternate; }
+    .vh-bucket:nth-child(3n+1) { animation-delay:0s; }
+    .vh-bucket:nth-child(3n+4) { animation-delay:0.3s; }
+    .vh-bucket:nth-child(3n+7) { animation-delay:0.6s; }
+    @keyframes bucketGlow { from{box-shadow:0 0 4px #a78bfa;border-color:#a78bfa55;} to{box-shadow:0 0 16px #a78bfa;border-color:#a78bfa;} }
+    .vh-kv { border:2px solid #a78bfa55; padding:8px 16px; color:#9977cc; background:#0d0818; border-left:none; }
+    .victory-btns { display:flex; gap:16px; margin-top:20px; }
+    .victory-btn { background:none; border:2px solid #a78bfa; color:#a78bfa; font-family:'Orbitron',monospace; font-size:0.8rem; letter-spacing:3px; padding:14px 32px; cursor:pointer; border-radius:2px; transition:all 0.3s; }
+    .victory-btn:hover { background:#a78bfa; color:#000; box-shadow:0 0 30px #a78bfa88; }
+    .victory-btn.secondary { border-color:#ffcc00; color:#ffcc00; }
+    .victory-btn.secondary:hover { background:#ffcc00; color:#000; box-shadow:0 0 30px #ffcc0088; }
+
+    /* ── Did Not Escape ── */
+    #did-not-escape { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.96); z-index:500; flex-direction:column; justify-content:center; align-items:center; gap:20px; }
+    #did-not-escape.open { display:flex; }
+    .escape-fail-title { font-family:'Orbitron',monospace; font-size:2.8rem; font-weight:900; color:#ff4444; text-shadow:0 0 40px #ff4444; animation:pulse-red 1s infinite; }
+    @keyframes pulse-red { 0%,100%{text-shadow:0 0 40px #ff4444;} 50%{text-shadow:0 0 60px #ff4444,0 0 80px #ff0000;} }
+    .escape-fail-sub { color:#ff6b6b; font-size:1.2rem; letter-spacing:3px; }
+    .escape-fail-msg { color:#9a5555; font-size:0.9rem; text-align:center; max-width:500px; }
+    .escape-fail-score { color:#ffaa00; font-size:1.1rem; margin-top:10px; }
+    .escape-fail-btns { display:flex; gap:16px; margin-top:20px; }
+    .escape-fail-btn { background:none; border:2px solid #ff4444; color:#ff4444; font-family:'Orbitron',monospace; font-size:0.8rem; letter-spacing:3px; padding:14px 32px; cursor:pointer; border-radius:2px; transition:all 0.3s; }
+    .escape-fail-btn:hover { background:#ff4444; color:#000; box-shadow:0 0 30px #ff444488; }
+    .escape-fail-btn.secondary { border-color:#ffaa00; color:#ffaa00; }
+    .escape-fail-btn.secondary:hover { background:#ffaa00; color:#000; box-shadow:0 0 30px #ffaa0088; }
+
+    a-scene { cursor: pointer; }
+  </style>
+</head>
+<body>
+
+<!-- ── Intro Screen ── -->
+<div id="intro">
+  <div class="intro-title">🗝️ HASHMAP<br>ESCAPE ROOM</div>
+  <div class="intro-subtitle">HASH YOUR WAY TO FREEDOM</div>
+  <div class="intro-sub">Navigate a dungeon of buckets and keys. Master hashing, collision, and lookup to escape the map.</div>
+  <div class="intro-hashmap">
+    <div class="hm-bucket">[0]</div><div class="hm-key">—</div><div class="hm-val">empty</div>
+    <div class="hm-bucket active">[1]</div><div class="hm-key">"escape"</div><div class="hm-val">→ true</div>
+    <div class="hm-bucket">[2]</div><div class="hm-key">—</div><div class="hm-val">empty</div>
+    <div class="hm-bucket active">[3]</div><div class="hm-key">"key"</div><div class="hm-val">→ 42</div>
+    <div class="hm-bucket">[4]</div><div class="hm-key">—</div><div class="hm-val">empty</div>
+  </div>
+  <button id="start-btn" onclick="startGame()">ENTER THE MAP</button>
+</div>
+
+<div id="crosshair"></div>
+
+<!-- ── HUD ── -->
+<div id="hud">
+  <div id="hud-title">🗝️ HASHMAP ESCAPE</div>
+  <div id="hud-right">
+    <div class="hud-badge" id="room-name-badge">HASH DUNGEON</div>
+    <div class="hud-badge" id="timer-badge">TIME: 2:00</div>
+    <div class="hud-badge" id="score-badge">SCORE: 0</div>
+    <div class="hud-badge" id="puzzle-count-badge">BUCKETS: 0/3</div>
+  </div>
+</div>
+
+<!-- ── Progress counter ── -->
+<div id="escape-counter">
+  <span class="counter-label">KEYS FOUND</span>
+  <div class="counter-pips">
+    <div class="pip" id="pip-0"></div>
+    <div class="pip" id="pip-1"></div>
+    <div class="pip" id="pip-2"></div>
+  </div>
+  <span class="counter-label" id="counter-text">0 / 3</span>
+</div>
+
+<div id="score-popup">+200 PTS</div>
+
+<!-- ── Room transition ── -->
+<div id="room-transition">
+  <div id="transition-text">COMPUTING HASH...</div>
+  <div id="transition-sub">MAPPING KEYS TO DUNGEON BUCKETS</div>
+</div>
+
+<!-- ── Puzzle Modal ── -->
+<div id="puzzle-modal">
+  <div id="monitor-assembly">
+    <div id="monitor-bezel">
+      <span id="monitor-brand">HASH·SYS</span>
+      <div id="monitor-screen">
+        <div id="screen-titlebar">
+          <div id="titlebar-dots">
+            <div class="tb-dot red" onclick="closePuzzle()"></div>
+            <div class="tb-dot yellow"></div>
+            <div class="tb-dot green"></div>
+          </div>
+          <div id="titlebar-name">
+            <span id="titlebar-filename">hash_terminal</span>.exe — bucket_puzzle
+          </div>
+          <div id="titlebar-right"><span>●●●</span></div>
+        </div>
+        <div id="screen-content">
+          <div class="puzzle-tag" id="puzzle-tag">HASHMAP</div>
+          <div id="puzzle-title">Loading...</div>
+          <div id="puzzle-difficulty"></div>
+          <hr class="screen-divider">
+          <div id="puzzle-description"></div>
+          <pre id="puzzle-code-block"></pre>
+          <button id="hint-btn" onclick="showHint()">💡 SHOW HINT</button>
+          <div id="hint-text"></div>
+          <div class="options-grid" id="options-grid"></div>
+          <div id="puzzle-feedback"></div>
+          <button id="next-puzzle-btn" onclick="handleNextBtn()">CONTINUE →</button>
+        </div>
+      </div>
+    </div>
+    <div id="monitor-neck"></div>
+    <div id="monitor-base"></div>
+  </div>
+</div>
+
+<!-- ── Victory ── -->
+<div id="victory">
+  <div class="victory-title">🗝️ UNMAPPED!</div>
+  <div class="victory-hashmap">
+    <div class="vh-bucket">[0]</div><div class="vh-kv">KEY_1</div><div class="vh-kv">✓ SOLVED</div>
+    <div class="vh-bucket">[1]</div><div class="vh-kv">KEY_2</div><div class="vh-kv">✓ SOLVED</div>
+    <div class="vh-bucket">[2]</div><div class="vh-kv">KEY_3</div><div class="vh-kv">✓ SOLVED</div>
+  </div>
+  <div class="victory-sub">ALL BUCKETS UNLOCKED<br>YOU ESCAPED THE HASHMAP DUNGEON</div>
+  <div class="victory-score" id="final-score"></div>
+  <div class="victory-btns">
+    <button class="victory-btn" onclick="location.reload()">PLAY AGAIN</button>
+    <button class="victory-btn secondary" onclick="goToLevels()">← LEVEL SELECT</button>
+  </div>
+</div>
+
+<!-- ── Did Not Escape ── -->
+<div id="did-not-escape">
+  <div class="escape-fail-title">⏰ TIME'S UP</div>
+  <div class="escape-fail-sub">YOU DID NOT ESCAPE</div>
+  <div class="escape-fail-msg">The dungeon locked down before you could solve all the puzzles.</div>
+  <div class="escape-fail-score" id="timeout-score"></div>
+  <div class="escape-fail-btns">
+    <button class="escape-fail-btn" onclick="location.reload()">TRY AGAIN</button>
+    <button class="escape-fail-btn secondary" onclick="goToLevels()">← LEVEL SELECT</button>
+  </div>
+</div>
+
+<!-- ── A-Frame Scene ── -->
+<a-scene id="scene" style="display:none" vr-mode-ui="enabled: false" renderer="antialias: true">
+  <a-assets timeout="30000">
+    <a-asset-item id="hash-model" src="/static/hashing.glb"></a-asset-item>
+  </a-assets>
+
+  <a-sky id="room-sky" color="#07040f"></a-sky>
+
+  <a-entity id="hash-room-entity">
+    <!-- Main room model -->
+    <a-gltf-model id="room-floor" src="#hash-model" position="0 0 0" rotation="0 0 0" scale="1 1 1"></a-gltf-model>
+
+    <!-- ── Puzzle Zone 0: Bucket Alpha — position unchanged X=-3, Z=-1 ── -->
+    <a-entity id="node-zone-0" class="node-zone" position="-3 0 -1">
+      <!-- Spinning diamond key shape -->
+      <a-box width="0.3" height="0.3" depth="0.3" color="#a78bfa" opacity="0.85"
+        rotation="45 0 45"
+        animation="property:rotation;from:45 0 45;to:45 360 45;loop:true;dur:4000;easing:linear"
+        animation__pulse="property:scale;from:1 1 1;to:1.3 1.3 1.3;loop:true;dur:800;dir:alternate;easing:easeInOutSine">
+      </a-box>
+      <a-box width="0.12" height="0.12" depth="0.12" color="#f0abfc" opacity="0.7"
+        position="0 0.45 0"
+        animation="property:rotation;from:0 0 0;to:0 360 0;loop:true;dur:2000;easing:linear">
+      </a-box>
+      <a-light type="point" color="#8855dd" intensity="0.9" distance="4"></a-light>
+      <a-entity id="node-hint-0" position="0 1.8 0" visible="false">
+        <a-plane width="1.8" height="0.32" color="#07040f" opacity="0.92" position="0 0 -0.01" side="double"></a-plane>
+        <a-text value="[ E ]  BUCKET PUZZLE 1" align="center" color="#a78bfa" scale="0.56 0.56 0.56"></a-text>
+      </a-entity>
+      <a-text value="key→?" position="0 0.7 0" color="#a78bfa55" scale="0.6 0.6 0.6" align="center"></a-text>
+    </a-entity>
+
+    <!-- ── Puzzle Zone 1: Bucket Beta — X=3.89, Y=0, Z=4.57 ── -->
+    <a-entity id="node-zone-1" class="node-zone" position="3.89 0 4.57">
+      <a-box width="0.3" height="0.3" depth="0.3" color="#f0abfc" opacity="0.85"
+        rotation="45 0 45"
+        animation="property:rotation;from:45 0 45;to:45 360 45;loop:true;dur:3000;easing:linear"
+        animation__pulse="property:scale;from:1 1 1;to:1.3 1.3 1.3;loop:true;dur:1000;dir:alternate;easing:easeInOutSine">
+      </a-box>
+      <a-box width="0.12" height="0.12" depth="0.12" color="#c084fc" opacity="0.7"
+        position="0 0.45 0"
+        animation="property:rotation;from:0 0 0;to:0 360 0;loop:true;dur:2500;easing:linear">
+      </a-box>
+      <a-light type="point" color="#cc55dd" intensity="0.9" distance="4"></a-light>
+      <a-entity id="node-hint-1" position="0 1.8 0" visible="false">
+        <a-plane width="1.8" height="0.32" color="#07040f" opacity="0.92" position="0 0 -0.01" side="double"></a-plane>
+        <a-text value="[ E ]  BUCKET PUZZLE 2" align="center" color="#f0abfc" scale="0.56 0.56 0.56"></a-text>
+      </a-entity>
+      <a-text value="hash()" position="0 0.7 0" color="#f0abfc55" scale="0.6 0.6 0.6" align="center"></a-text>
+    </a-entity>
+
+    <!-- ── Puzzle Zone 2: Bucket Gamma — X=-8.10, Y=0, Z=6.94 ── -->
+    <a-entity id="node-zone-2" class="node-zone" position="-8.10 0 6.94">
+      <a-box width="0.3" height="0.3" depth="0.3" color="#e879f9" opacity="0.85"
+        rotation="45 0 45"
+        animation="property:rotation;from:45 0 45;to:45 360 45;loop:true;dur:2500;easing:linear"
+        animation__pulse="property:scale;from:1 1 1;to:1.35 1.35 1.35;loop:true;dur:600;dir:alternate;easing:easeInOutSine">
+      </a-box>
+      <a-box width="0.12" height="0.12" depth="0.12" color="#fbbf24" opacity="0.7"
+        position="0 0.45 0"
+        animation="property:rotation;from:0 0 0;to:0 360 0;loop:true;dur:1800;easing:linear">
+      </a-box>
+      <a-light type="point" color="#dd44ff" intensity="0.9" distance="4"></a-light>
+      <a-entity id="node-hint-2" position="0 1.8 0" visible="false">
+        <a-plane width="2.1" height="0.32" color="#07040f" opacity="0.92" position="0 0 -0.01" side="double"></a-plane>
+        <a-text value="[ E ]  BUCKET PUZZLE 3 — ESCAPE!" align="center" color="#e879f9" scale="0.52 0.52 0.52"></a-text>
+      </a-entity>
+      <a-text value="escape!" position="0 0.7 0" color="#e879f955" scale="0.6 0.6 0.6" align="center"></a-text>
+    </a-entity>
+
+    <!-- Floating decoration -->
+    <a-entity position="0 1.2 -8">
+      <a-text value="{ key: null }" align="center" color="#a78bfa11" scale="2 2 2"></a-text>
+    </a-entity>
+  </a-entity>
+
+  <!-- Lighting -->
+  <a-light type="ambient" color="#0f0520" intensity="1.6"></a-light>
+  <a-light id="main-light" type="point" position="0 4 0" color="#7744bb" intensity="0.4" distance="20"></a-light>
+  <a-light type="point" position="-3 3 -1"     color="#a78bfa" intensity="0.3" distance="8"></a-light>
+  <a-light type="point" position="3.89 3 4.57"  color="#f0abfc" intensity="0.3" distance="8"></a-light>
+  <a-light type="point" position="-8.10 3 6.94" color="#e879f9" intensity="0.3" distance="8"></a-light>
+
+  <a-entity id="rig" position="0 0 0">
+    <a-camera look-controls wasd-controls="acceleration: 20" position="0 1.6 0">
+      <a-cursor fuse="false" color="#a78bfa" raycaster="objects: .clickable"></a-cursor>
+    </a-camera>
+  </a-entity>
+</a-scene>
+
+<script>
+/* ════════════════════════════════════════════════
+   HASHMAP PUZZLE BANK — 3 puzzles
+════════════════════════════════════════════════ */
+const HASH_PUZZLES = [
+  {
+    tag: "HASH FUNCTION",
+    title: "Which Bucket? — Index Calculation",
+    difficulty: "EASY",
+    description: "A HashMap uses an array of size 7 (indices 0–6). Keys are hashed with the formula below.\nWhich bucket index does the key \"cat\" land in?\n\nASCII values:  c=99,  a=97,  t=116",
+    code:
+`hashCode(key, size):
+    total = 0
+    for each char in key:
+        total += ASCII(char)
+    return total % size
+
+# Computing for key = "cat", size = 7:
+total = ASCII('c') + ASCII('a') + ASCII('t')
+      =   99       +   97       +  116
+      =  312
+
+index = 312 % 7  =  ???
+
+Buckets: [0] [1] [2] [3] [4] [5] [6]`,
+    hint: "312 / 7 = 44 remainder ?  →  7 × 44 = 308  →  312 − 308 = ?",
+    options: [
+      "Index 3",
+      "Index 4",
+      "Index 5",
+      "Index 6"
+    ],
+    answer: 1,
+    explanation: "✓ Correct! 312 % 7 = 4. 'cat' lands in bucket [4]. (7×44=308, 312−308=4)",
+    points: 150
+  },
+  {
+    tag: "COLLISION HANDLING",
+    title: "Chaining — Key Lookup After Collision",
+    difficulty: "MEDIUM",
+    description: "A HashMap of size 5 uses separate chaining. After the insertions below, what value is returned by get(\"dog\")?",
+    code:
+`HashMap size = 5
+hash(key) = sum(ASCII chars) % 5
+
+Insertions:
+  put("cat", "meow")   hash = 312%5 = 2
+                        bucket[2]: [("cat","meow")]
+
+  put("dog", "woof")   hash = 316%5 = 1
+                        bucket[1]: [("dog","woof")]
+
+  put("god", "deity")  hash = 316%5 = 1  ← COLLISION
+                        bucket[1]: [("dog","woof")
+                                     → ("god","deity")]
+
+# get("dog"):
+#   1. hash("dog") = 1
+#   2. Go to bucket[1]
+#   3. Traverse chain, match key == "dog"
+#   4. Return ???
+
+bucket[1]:  ("dog","woof") → ("god","deity") → NULL`,
+    hint: "Chaining stores multiple pairs as a linked list in the bucket. Lookup matches by KEY, not just index.",
+    options: [
+      '"woof"',
+      '"deity"',
+      '"dog"',
+      'KeyError — collision overwrote it'
+    ],
+    answer: 0,
+    explanation: "✓ Correct! Chaining preserves both entries. get(\"dog\") traverses bucket[1], matches key==\"dog\" first, returns \"woof\".",
+    points: 250
+  },
+  {
+    tag: "TWO SUM",
+    title: "Two Sum — HashMap Lookup",
+    difficulty: "HARD",
+    description: "Classic Two Sum: given the array and target below, trace the HashMap approach.\nWhich pair of INDICES sums to the target?\n\nnums = [2, 7, 11, 15],  target = 9",
+    code:
+`twoSum(nums, target):
+    seen = {}   ← empty HashMap { value: index }
+
+    i=0: num=2  complement = 9-2 = 7
+         7 in seen? NO  →  seen = {2:0}
+
+    i=1: num=7  complement = 9-7 = 2
+         2 in seen? YES → seen[2] = 0
+         return [seen[complement], i]
+              = [seen[2], 1]
+              = [0, 1]          ← FOUND!
+
+    # (loop would continue but we already returned)
+    i=2: num=11  complement = -2  ...
+    i=3: num=15  complement = -6  ...
+
+Result: indices [?, ?]`,
+    hint: "The complement of nums[i] is (target − nums[i]). If it already exists in the map, that's the pair. Map stores {value → index}.",
+    options: [
+      "Indices [0, 1]  (values 2 + 7 = 9)",
+      "Indices [1, 2]  (values 7 + 11 = 18)",
+      "Indices [0, 2]  (values 2 + 11 = 13)",
+      "Indices [2, 3]  (values 11 + 15 = 26)"
+    ],
+    answer: 0,
+    explanation: "✓ Correct! At i=1, complement=2 is found in seen at index 0. Return [0,1]. nums[0]+nums[1] = 2+7 = 9 ✓",
+    points: 300
+  }
+];
+
+/* ════════════════════════════════════════════════
+   GAME STATE
+════════════════════════════════════════════════ */
+const TOTAL_PUZZLES = 3;
+const GAME_TIME = 120; // 2 minutes in seconds
+let totalScore    = 0;
+let solvedCount   = 0;
+let puzzleActive  = false;
+let nearNode      = -1;
+let gameTimeLeft  = GAME_TIME;
+let gameRunning   = false;
+let timerInterval = null;
+const nodeSolved  = [false, false, false];
+let nextBtnAction = null;
+
+const NODE_ZONES = [
+  { x: -3,    z: -1    },
+  { x:  3.89, z:  4.57 },
+  { x: -8.10, z:  6.94 }
+];
+const NODE_DIST = 2.0;
+
+/* ════════════════════════════════════════════════
+   START
+════════════════════════════════════════════════ */
+function startGame() {
+  document.getElementById('intro').classList.add('fade-out');
+  const sceneEl = document.getElementById('scene');
+  sceneEl.style.display = '';
+  setTimeout(() => document.getElementById('intro').style.display = 'none', 800);
+
+  const overlay = document.getElementById('room-transition');
+  overlay.classList.add('active');
+  setTimeout(() => overlay.classList.remove('active'), 2200);
+
+  const doLoad = () => { startProximityLoop(); };
+  if (sceneEl.hasLoaded) doLoad();
+  else sceneEl.addEventListener('loaded', doLoad, { once: true });
+
+  document.getElementById('room-name-badge').textContent    = '🗝️ HASH DUNGEON';
+  document.getElementById('puzzle-count-badge').textContent = `BUCKETS: 0/${TOTAL_PUZZLES}`;
+
+  // Start the timer
+  startTimer();
+}
+
+/* ════════════════════════════════════════════════
+   TIMER FUNCTIONS
+════════════════════════════════════════════════ */
+function startTimer() {
+  gameRunning = true;
+  gameTimeLeft = GAME_TIME;
+  updateTimerDisplay();
+  timerInterval = setInterval(() => {
+    gameTimeLeft--;
+    updateTimerDisplay();
+    
+    if (gameTimeLeft <= 0) {
+      endGameTimeout();
+    }
+  }, 1000);
+}
+
+function updateTimerDisplay() {
+  const mins = Math.floor(gameTimeLeft / 60);
+  const secs = gameTimeLeft % 60;
+  const display = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  const badge = document.getElementById('timer-badge');
+  if (badge) {
+    badge.textContent = `TIME: ${display}`;
+    // Warning color at 30 seconds
+    if (gameTimeLeft <= 30) badge.style.color = '#ff4444';
+    else badge.style.color = '#ffb3b3';
+  }
+}
+
+function stopTimer() {
+  gameRunning = false;
+  if (timerInterval) clearInterval(timerInterval);
+}
+
+function endGameTimeout() {
+  stopTimer();
+  puzzleActive = true; // Prevent further interaction
+  closePuzzle();
+  
+  document.getElementById('timeout-score').textContent = `SCORE BEFORE TIMEOUT: ${totalScore} PTS`;
+  document.getElementById('did-not-escape').classList.add('open');
+}
+
+/* ════════════════════════════════════════════════
+   KEYBOARD
+════════════════════════════════════════════════ */
+window.addEventListener('keydown', (e) => {
+  if (puzzleActive) return;
+  if (e.key === 'e' || e.key === 'E') {
+    if (nearNode >= 0 && !nodeSolved[nearNode]) {
+      openNodePuzzle(nearNode);
+    }
+  }
+});
+
+/* ════════════════════════════════════════════════
+   PLAYER POSITION
+════════════════════════════════════════════════ */
+function getPlayerPos() {
+  const cam = document.querySelector('a-camera');
+  if (cam && cam.object3D) {
+    const wp = new THREE.Vector3();
+    cam.object3D.getWorldPosition(wp);
+    return wp;
+  }
+  const rig = document.getElementById('rig');
+  return rig && rig.object3D ? rig.object3D.position : null;
+}
+
+/* ════════════════════════════════════════════════
+   PROXIMITY LOOP
+════════════════════════════════════════════════ */
+function startProximityLoop() {
+  setInterval(() => {
+    if (puzzleActive) return;
+    const p = getPlayerPos();
+    if (!p) return;
+
+    console.log(`Position: X=${p.x.toFixed(2)}, Y=${p.y.toFixed(2)}, Z=${p.z.toFixed(2)}`);
+
+    let foundIdx = -1;
+    NODE_ZONES.forEach((nz, i) => {
+      const hint = document.getElementById(`node-hint-${i}`);
+      if (nodeSolved[i]) {
+        if (hint) hint.setAttribute('visible', false);
+        return;
+      }
+      const dist = Math.hypot(p.x - nz.x, p.z - nz.z);
+      if (dist < NODE_DIST) {
+        foundIdx = i;
+        if (hint) hint.setAttribute('visible', true);
+      } else {
+        if (hint) hint.setAttribute('visible', false);
+      }
+    });
+
+    if (foundIdx !== nearNode) {
+      nearNode = foundIdx;
+      if (foundIdx >= 0 && !nodeSolved[foundIdx]) {
+        const labels = ['1: Hash Index', '2: Collision Chaining', '3: Two Sum — ESCAPE!'];
+        showToast(`Near Bucket ${foundIdx + 1} — Press [E] for Puzzle ${labels[foundIdx]}`);
+      } else {
+        hideToast();
+      }
+    }
+  }, 150);
+}
+
+/* ════════════════════════════════════════════════
+   OPEN PUZZLE
+════════════════════════════════════════════════ */
+function openNodePuzzle(idx) {
+  const puzzle = HASH_PUZZLES[idx];
+  puzzleActive = true;
+  hideToast();
+
+  populateModal(puzzle, `bucket_puzzle_${idx + 1}`);
+  document.querySelectorAll('.option-btn').forEach((btn, i) => {
+    btn.onclick = () => checkAnswer(i, idx, btn);
+  });
+  document.getElementById('puzzle-modal').classList.add('open');
+  document.getElementById('screen-content').scrollTop = 0;
+}
+
+/* ════════════════════════════════════════════════
+   CHECK ANSWER
+════════════════════════════════════════════════ */
+function checkAnswer(chosen, nodeIdx, btnEl) {
+  if (!puzzleActive) return;
+  const puzzle = HASH_PUZZLES[nodeIdx];
+  document.querySelectorAll('.option-btn').forEach(b => b.style.pointerEvents = 'none');
+  const feedback = document.getElementById('puzzle-feedback');
+
+  if (chosen === puzzle.answer) {
+    btnEl.classList.add('correct');
+    feedback.className = 'success';
+    feedback.textContent = puzzle.explanation;
+    feedback.style.display = 'block';
+
+    totalScore += puzzle.points;
+    document.getElementById('score-badge').textContent = `SCORE: ${totalScore}`;
+    showScorePopup(`+${puzzle.points} PTS`);
+
+    nodeSolved[nodeIdx] = true;
+    solvedCount++;
+
+    const zone = document.getElementById(`node-zone-${nodeIdx}`);
+    if (zone) {
+      const boxes = zone.querySelectorAll('a-box');
+      boxes.forEach(box => { box.setAttribute('color', '#334455'); box.setAttribute('opacity', '0.2'); });
+    }
+
+    updateProgress();
+    puzzleActive = false;
+
+    setTimeout(() => {
+      const btn = document.getElementById('next-puzzle-btn');
+      const isLast = solvedCount >= TOTAL_PUZZLES;
+      btn.textContent = isLast ? '🏆 ESCAPE!' : 'CLOSE ✓';
+      nextBtnAction = () => {
+        closePuzzle();
+        if (isLast) setTimeout(showVictory, 600);
+      };
+      btn.style.display = 'block';
+    }, 1000);
+
+  } else {
+    btnEl.classList.add('wrong');
+    feedback.className = 'fail';
+    feedback.textContent = `✗ Incorrect. Try again!`;
+    feedback.style.display = 'block';
+    puzzleActive = false;
+
+    setTimeout(() => {
+      const btn = document.getElementById('next-puzzle-btn');
+      btn.textContent = 'TRY AGAIN';
+      nextBtnAction = closePuzzle;
+      btn.style.display = 'block';
+    }, 800);
+  }
+}
+
+function handleNextBtn() {
+  if (nextBtnAction) nextBtnAction();
+}
+
+/* ════════════════════════════════════════════════
+   PROGRESS COUNTER
+════════════════════════════════════════════════ */
+function updateProgress() {
+  for (let i = 0; i < TOTAL_PUZZLES; i++) {
+    const pip = document.getElementById(`pip-${i}`);
+    if (pip) pip.classList.toggle('filled', i < solvedCount);
+  }
+  document.getElementById('counter-text').textContent = `${solvedCount} / ${TOTAL_PUZZLES}`;
+  document.getElementById('puzzle-count-badge').textContent = `BUCKETS: ${solvedCount}/${TOTAL_PUZZLES}`;
+}
+
+/* ════════════════════════════════════════════════
+   VICTORY
+════════════════════════════════════════════════ */
+function showVictory() {
+  stopTimer();
+  document.getElementById('final-score').textContent = `FINAL SCORE: ${totalScore} PTS`;
+  document.getElementById('victory').classList.add('open');
+}
+
+function goToLevels() {
+  document.body.style.transition = 'opacity .6s';
+  document.body.style.opacity = '0';
+  setTimeout(() => { window.location.href = '/level'; }, 650);
+}
+
+/* ════════════════════════════════════════════════
+   MODAL RENDERER
+════════════════════════════════════════════════ */
+function populateModal(puzzle, filename) {
+  document.getElementById('titlebar-filename').textContent  = filename;
+  document.getElementById('puzzle-tag').textContent         = puzzle.tag;
+  document.getElementById('puzzle-title').textContent       = puzzle.title;
+  const cls = { EASY:'diff-easy', MEDIUM:'diff-medium', HARD:'diff-hard' }[puzzle.difficulty];
+  document.getElementById('puzzle-difficulty').innerHTML    = `<span class="${cls}">◆ ${puzzle.difficulty}</span>`;
+  document.getElementById('puzzle-description').textContent = puzzle.description;
+  document.getElementById('puzzle-code-block').textContent  = puzzle.code;
+  document.getElementById('hint-text').style.display        = 'none';
+  document.getElementById('hint-text').textContent          = '💡 ' + puzzle.hint;
+  document.getElementById('puzzle-feedback').className      = '';
+  document.getElementById('puzzle-feedback').style.display  = 'none';
+  document.getElementById('next-puzzle-btn').style.display  = 'none';
+  nextBtnAction = null;
+  const grid = document.getElementById('options-grid');
+  grid.innerHTML = '';
+  puzzle.options.forEach((opt, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'option-btn';
+    btn.textContent = `${['A','B','C','D'][i]}.  ${opt}`;
+    grid.appendChild(btn);
+  });
+}
+
+/* ════════════════════════════════════════════════
+   HELPERS
+════════════════════════════════════════════════ */
+function closePuzzle() {
+  document.getElementById('puzzle-modal').classList.remove('open');
+  document.getElementById('did-not-escape').classList.remove('open');
+  puzzleActive = false;
+}
+
+function showHint() {
+  document.getElementById('hint-text').style.display = 'block';
+}
+
+function showScorePopup(msg) {
+  const p = document.getElementById('score-popup');
+  p.textContent = msg; p.style.display = 'block';
+  setTimeout(() => p.style.display = 'none', 2000);
+}
+
+function showToast(msg) {
+  let t = document.getElementById('proximity-toast');
+  if (!t) {
+    t = document.createElement('div'); t.id = 'proximity-toast';
+    t.style.cssText = `position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#07040f;border:1px solid #a78bfa88;color:#c4b5fd;font-family:'Share Tech Mono',monospace;font-size:0.85rem;letter-spacing:2px;padding:12px 28px;border-radius:3px;z-index:150;pointer-events:none;`;
+    document.body.appendChild(t);
+  }
+  t.textContent = msg; t.style.display = 'block';
+}
+
+function hideToast() {
+  const t = document.getElementById('proximity-toast');
+  if (t) t.style.display = 'none';
+}
+</script>
+</body>
+</html>

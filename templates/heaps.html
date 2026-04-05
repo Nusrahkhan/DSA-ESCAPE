@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Heap Escape Room</title>
+  <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap');
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Share Tech Mono', monospace; background: #000; overflow: hidden; }
+
+    /* ── HUD ── */
+    #hud { position: fixed; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; align-items: center; padding: 16px 28px; background: linear-gradient(180deg, rgba(0,0,0,0.88) 0%, transparent 100%); z-index: 100; pointer-events: none; }
+    #hud-title { font-family: 'Orbitron', monospace; font-size: 1.1rem; font-weight: 900; color: #00ff88; letter-spacing: 3px; text-shadow: 0 0 20px #00ff8888; }
+    #hud-right { display: flex; gap: 24px; align-items: center; }
+    .hud-badge { font-size: 0.75rem; color: #88ffcc; letter-spacing: 2px; border: 1px solid #00ff8844; padding: 6px 14px; border-radius: 2px; background: rgba(0,255,136,0.06); }
+    #room-name-badge { font-family: 'Orbitron', monospace; color: #44ffaa; border-color: #44ffaa44; background: rgba(68,255,170,0.06); text-shadow: 0 0 10px #44ffaa66; }
+
+    /* ── Puzzle Modal ── */
+    #puzzle-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.96); z-index: 200; justify-content: center; align-items: center; }
+    #puzzle-modal.open { display: flex; }
+    #monitor-assembly { display: flex; flex-direction: column; align-items: center; animation: monitorPowerOn 0.4s ease; }
+    @keyframes monitorPowerOn { 0% { opacity:0; transform:scale(0.94) translateY(20px); filter:brightness(3); } 60% { opacity:1; filter:brightness(1.3); } 100% { transform:scale(1) translateY(0); filter:brightness(1); } }
+    #monitor-bezel { background: linear-gradient(160deg, #001a0a 0%, #000f05 40%, #000a03 100%); border-radius: 12px 12px 4px 4px; padding: 18px 18px 22px; box-shadow: 0 0 0 1px #001a08, 0 0 0 2px #003311, 4px 4px 20px rgba(0,0,0,0.8), inset 0 1px 0 rgba(0,255,136,0.08), inset 0 -2px 6px rgba(0,0,0,0.6); width: min(760px, 94vw); position: relative; }
+    #monitor-bezel::after { content: ''; position: absolute; bottom: 10px; right: 22px; width: 7px; height: 7px; border-radius: 50%; background: #00ff88; box-shadow: 0 0 6px #00ff88, 0 0 12px #00ff8866; animation: ledBlink 3s ease-in-out infinite; }
+    @keyframes ledBlink { 0%,90%,100% { opacity:1; } 95% { opacity:0.3; } }
+    #monitor-brand { position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); font-family: 'Orbitron', monospace; font-size: 0.55rem; color: #001a08; letter-spacing: 4px; }
+    #monitor-screen { background: #000f05; border-radius: 4px; overflow: hidden; position: relative; border: 2px solid #001a08; box-shadow: inset 0 0 60px rgba(0,20,8,0.9), inset 0 0 120px rgba(0,255,136,0.03), 0 0 30px rgba(0,255,136,0.08); }
+    #monitor-screen::before { content: ''; position: absolute; inset: 0; z-index: 100; pointer-events: none; background: repeating-linear-gradient(0deg, transparent 0px, transparent 2px, rgba(0,0,0,0.18) 2px, rgba(0,0,0,0.18) 3px); }
+    #monitor-screen::after { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 35%; z-index: 101; pointer-events: none; background: linear-gradient(180deg, rgba(0,255,136,0.04) 0%, rgba(255,255,255,0.01) 50%, transparent 100%); border-radius: 4px 4px 0 0; }
+    #screen-titlebar { background: linear-gradient(90deg, #001508 0%, #002210 50%, #001508 100%); border-bottom: 1px solid #00ff8822; padding: 0; display: flex; align-items: stretch; height: 36px; position: relative; z-index: 10; }
+    #titlebar-dots { display: flex; align-items: center; gap: 7px; padding: 0 14px; border-right: 1px solid #00ff8811; }
+    .tb-dot { width: 12px; height: 12px; border-radius: 50%; cursor: pointer; transition: filter 0.15s; }
+    .tb-dot:hover { filter: brightness(1.3); }
+    .tb-dot.red    { background: radial-gradient(circle at 35% 35%, #ff7070, #cc3333); box-shadow: 0 0 4px #cc333366; }
+    .tb-dot.yellow { background: radial-gradient(circle at 35% 35%, #ffdd70, #ccaa00); box-shadow: 0 0 4px #ccaa0066; }
+    .tb-dot.green  { background: radial-gradient(circle at 35% 35%, #70ff99, #00aa44); box-shadow: 0 0 4px #00aa4466; }
+    #titlebar-name { flex:1; display:flex; align-items:center; justify-content:center; font-size:0.65rem; color:#004422; letter-spacing:2px; }
+    #titlebar-name span { color: #007733; }
+    #titlebar-right { display:flex; align-items:center; padding:0 12px; gap:10px; border-left:1px solid #00ff8811; font-size:0.6rem; color:#002211; }
+    #screen-content { padding: 20px 24px 24px; max-height: calc(80vh - 36px); overflow-y: auto; position: relative; z-index: 10; color: #bbffdd; }
+    #screen-content::-webkit-scrollbar { width: 6px; }
+    #screen-content::-webkit-scrollbar-track { background: #000f05; }
+    #screen-content::-webkit-scrollbar-thumb { background: #00ff8833; border-radius: 3px; }
+    .puzzle-tag { font-size:0.6rem; letter-spacing:4px; color:#00ff8888; margin-bottom:10px; display:flex; align-items:center; gap:6px; }
+    .puzzle-tag::before { content:'▸▸'; color:#00ff8844; }
+    #puzzle-title { font-family:'Orbitron',monospace; font-size:1.2rem; font-weight:700; color:#ccffe8; margin-bottom:6px; line-height:1.3; text-shadow:0 0 20px rgba(0,255,136,0.2); }
+    #puzzle-difficulty { font-size:0.68rem; letter-spacing:2px; margin-bottom:18px; }
+    .diff-easy   { color:#00ff99; text-shadow:0 0 8px #00ff9944; }
+    .diff-medium { color:#ffaa00; text-shadow:0 0 8px #ffaa0044; }
+    .diff-hard   { color:#ff4488; text-shadow:0 0 8px #ff448844; }
+    .screen-divider { border:none; border-top:1px solid #00ff8818; margin:0 0 16px 0; }
+    #puzzle-description { color:#44bb88; font-size:0.84rem; line-height:1.75; margin-bottom:16px; padding:10px 12px; background:rgba(0,255,136,0.025); border-left:2px solid #00ff8833; border-radius:0 3px 3px 0; }
+    #puzzle-code-block { background:#000a03; border:1px solid #001a08; border-top:2px solid #00ff8822; border-radius:3px; padding:14px 16px; margin-bottom:16px; font-size:0.8rem; color:#55dd99; white-space:pre; overflow-x:auto; line-height:1.65; position:relative; }
+    #puzzle-code-block::before { content:'CODE'; position:absolute; top:-9px; left:10px; background:#000a03; padding:0 6px; font-size:0.52rem; color:#00ff8844; letter-spacing:3px; }
+    #hint-btn { background:none; border:1px solid #ffcc0022; color:#ffcc0044; font-family:'Share Tech Mono',monospace; font-size:0.68rem; letter-spacing:2px; padding:6px 14px; cursor:pointer; border-radius:2px; margin-bottom:14px; transition:all 0.2s; display:block; }
+    #hint-btn:hover { border-color:#ffcc00aa; color:#ffcc00; background:rgba(255,204,0,0.05); }
+    #hint-text { display:none; color:#ffcc0099; font-size:0.76rem; margin-bottom:14px; padding:8px 12px; background:rgba(255,204,0,0.04); border-left:2px solid #ffcc0033; border-radius:0 3px 3px 0; }
+    .options-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:16px; }
+    .option-btn { background:rgba(0,15,8,0.8); border:1px solid #001a08; color:#44bb88; font-family:'Share Tech Mono',monospace; font-size:0.79rem; padding:12px 14px; border-radius:3px; cursor:pointer; text-align:left; transition:all 0.18s; position:relative; overflow:hidden; }
+    .option-btn::before { content:''; position:absolute; left:0; top:0; bottom:0; width:2px; background:#00ff88; opacity:0; transition:opacity 0.15s; }
+    .option-btn:hover { border-color:#00ff8844; color:#88ffcc; background:rgba(0,255,136,0.05); }
+    .option-btn:hover::before { opacity:1; }
+    .option-btn.correct { background:rgba(0,40,25,0.9); border-color:#00ff9966; color:#00ff99; box-shadow:0 0 12px rgba(0,255,150,0.1); }
+    .option-btn.correct::before { opacity:1; background:#00ff99; }
+    .option-btn.wrong { background:rgba(20,0,10,0.9); border-color:#ff446655; color:#ff7799; }
+    #puzzle-feedback { font-size:0.8rem; margin-bottom:14px; padding:11px 14px; border-radius:3px; display:none; line-height:1.55; }
+    #puzzle-feedback.success { background:rgba(0,30,18,0.9); border:1px solid #00ff9933; border-left:3px solid #00ff99; color:#88ffcc; display:block; }
+    #puzzle-feedback.fail    { background:rgba(20,0,10,0.9); border:1px solid #ff446633; border-left:3px solid #ff4466; color:#ff9ab0; display:block; }
+    #next-puzzle-btn { display:none; background:transparent; border:1px solid #00ff8866; color:#00ff88; font-family:'Share Tech Mono',monospace; font-size:0.75rem; letter-spacing:3px; padding:11px 26px; cursor:pointer; border-radius:2px; margin-top:4px; transition:all 0.2s; }
+    #next-puzzle-btn:hover { background:rgba(0,255,136,0.08); border-color:#00ff88; color:#fff; box-shadow:0 0 16px rgba(0,255,136,0.2); }
+    #monitor-neck { width:50px; height:16px; background:linear-gradient(90deg,#000f05,#001a08,#000f05); clip-path:polygon(20% 0%,80% 0%,90% 100%,10% 100%); }
+    #monitor-base { width:180px; height:10px; background:linear-gradient(180deg,#001a08,#000f05); border-radius:0 0 8px 8px; box-shadow:0 4px 12px rgba(0,0,0,0.6); }
+
+    /* ── Room Transition ── */
+    #room-transition { display:none; position:fixed; inset:0; z-index:300; background:#000; justify-content:center; align-items:center; flex-direction:column; gap:16px; }
+    #room-transition.active { display:flex; animation:fadeInOut 2.2s forwards; }
+    @keyframes fadeInOut { 0%{opacity:0;} 25%{opacity:1;} 75%{opacity:1;} 100%{opacity:0;pointer-events:none;} }
+    #transition-text { font-family:'Orbitron',monospace; font-size:1.4rem; font-weight:700; color:#00ff88; letter-spacing:4px; text-align:center; text-shadow:0 0 30px #00ff88; }
+    #transition-sub { color:#003311; font-size:0.75rem; letter-spacing:3px; }
+
+    /* ── Crosshair ── */
+    #crosshair { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); width:20px; height:20px; pointer-events:none; z-index:50; }
+    #crosshair::before, #crosshair::after { content:''; position:absolute; background:rgba(0,255,136,0.7); border-radius:1px; }
+    #crosshair::before { width:2px; height:100%; left:50%; transform:translateX(-50%); }
+    #crosshair::after  { width:100%; height:2px; top:50%; transform:translateY(-50%); }
+
+    /* ── Intro ── */
+    #intro { position:fixed; inset:0; background:#000; z-index:999; display:flex; flex-direction:column; justify-content:center; align-items:center; gap:24px; }
+    #intro.fade-out { animation:fadeOut 0.8s forwards; }
+    @keyframes fadeOut { to { opacity:0; pointer-events:none; } }
+    .intro-title { font-family:'Orbitron',monospace; font-size:clamp(2rem,6vw,3.8rem); font-weight:900; color:#00ff88; text-align:center; text-shadow:0 0 40px #00ff8899; letter-spacing:4px; line-height:1.2; }
+    .intro-subtitle { color:#00ff88; font-family:'Orbitron',monospace; font-size:clamp(0.9rem,2.5vw,1.2rem); letter-spacing:6px; text-align:center; opacity:0.6; }
+    .intro-sub { color:#003311; font-size:0.85rem; letter-spacing:3px; text-align:center; max-width:440px; line-height:1.7; }
+
+    /* Heap tree diagram on intro */
+    .intro-heap { display:flex; flex-direction:column; align-items:center; gap:6px; margin:8px 0; }
+    .heap-row { display:flex; gap:10px; justify-content:center; }
+    .heap-node { width:44px; height:44px; border-radius:50%; border:2px solid #00ff8866; background:#001a08; color:#00ff88; font-size:0.8rem; display:flex; align-items:center; justify-content:center; font-family:'Share Tech Mono',monospace; }
+    .heap-node.root { border-color:#00ff88; color:#00ff88; box-shadow:0 0 12px #00ff8844; font-size:1rem; }
+    .heap-connector { width:2px; height:14px; background:#00ff8833; margin:0 auto; }
+    .heap-row-connectors { display:flex; gap:0; justify-content:center; }
+    .heap-branch { width:44px; height:14px; border-left:2px solid #00ff8822; border-bottom:2px solid #00ff8822; margin:0 5px; }
+    .heap-label { font-size:0.6rem; color:#00ff8833; letter-spacing:4px; margin-bottom:2px; }
+
+    #start-btn { background:transparent; border:2px solid #00ff88; color:#00ff88; font-family:'Orbitron',monospace; font-weight:700; font-size:0.9rem; letter-spacing:4px; padding:16px 48px; cursor:pointer; border-radius:2px; transition:all 0.3s; margin-top:10px; }
+    #start-btn:hover { background:#00ff88; color:#000; box-shadow:0 0 40px #00ff8888; }
+
+    /* ── Score popup ── */
+    #score-popup { position:fixed; top:80px; right:28px; z-index:150; display:none; background:#000f05; border:1px solid #00ff8866; color:#44ffaa; font-size:0.8rem; padding:10px 20px; border-radius:3px; letter-spacing:1px; animation:popIn 0.3s ease; }
+    @keyframes popIn { from{transform:scale(0.8) translateY(-10px);opacity:0;} to{transform:scale(1);opacity:1;} }
+
+    /* ── Progress counter ── */
+    #escape-counter { position:fixed; bottom:28px; left:50%; transform:translateX(-50%); z-index:150; display:flex; align-items:center; gap:10px; background:rgba(0,15,8,0.88); border:1px solid #00ff8833; padding:10px 24px; border-radius:4px; pointer-events:none; }
+    .counter-label { font-size:0.65rem; letter-spacing:3px; color:#003311; }
+    .counter-pips { display:flex; gap:8px; }
+    .pip { width:14px; height:14px; border-radius:50%; border:1.5px solid #00ff8844; background:transparent; transition:all 0.4s; }
+    .pip.filled { background:#00ff88; border-color:#00ff88; box-shadow:0 0 10px #00ff88; }
+
+    /* ── Victory ── */
+    #victory { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.96); z-index:500; flex-direction:column; justify-content:center; align-items:center; gap:20px; }
+    #victory.open { display:flex; }
+    .victory-title { font-family:'Orbitron',monospace; font-size:3rem; font-weight:900; color:#00ff88; text-shadow:0 0 60px #00ff88; animation:pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{text-shadow:0 0 60px #00ff88;} 50%{text-shadow:0 0 100px #00ff88,0 0 120px #44ffaa;} }
+    .victory-sub { color:#44bb88; font-size:1rem; letter-spacing:2px; text-align:center; }
+    .victory-score { color:#ffcc00; font-size:1.3rem; margin-top:10px; }
+    .victory-heap { display:flex; flex-direction:column; align-items:center; gap:8px; margin:10px 0; }
+    .v-heap-row { display:flex; gap:12px; justify-content:center; }
+    .v-node { width:48px; height:48px; border-radius:50%; border:2px solid #00ff88; display:flex; align-items:center; justify-content:center; font-size:0.75rem; color:#00ff88; background:#001a08; animation:nodeGlow 1.5s ease-in-out infinite alternate; }
+    .v-node:nth-child(2) { animation-delay:0.2s; }
+    .v-node:nth-child(3) { animation-delay:0.4s; }
+    @keyframes nodeGlow { from{box-shadow:0 0 4px #00ff88;border-color:#00ff8855;} to{box-shadow:0 0 16px #00ff88;border-color:#00ff88;} }
+    .victory-btns { display:flex; gap:16px; margin-top:20px; }
+    .victory-btn { background:none; border:2px solid #00ff88; color:#00ff88; font-family:'Orbitron',monospace; font-size:0.8rem; letter-spacing:3px; padding:14px 32px; cursor:pointer; border-radius:2px; transition:all 0.3s; }
+    .victory-btn:hover { background:#00ff88; color:#000; box-shadow:0 0 30px #00ff8888; }
+    .victory-btn.secondary { border-color:#ffcc00; color:#ffcc00; }
+    .victory-btn.secondary:hover { background:#ffcc00; color:#000; box-shadow:0 0 30px #ffcc0088; }
+
+    a-scene { cursor: pointer; }
+  </style>
+</head>
+<body>
+
+<!-- ── Intro Screen ── -->
+<div id="intro">
+  <div class="intro-title">🌿 HEAP<br>ESCAPE ROOM</div>
+  <div class="intro-subtitle">RISE TO THE ROOT</div>
+  <div class="intro-sub">Navigate a binary heap dungeon, master INSERT &amp; EXTRACT-MAX, and solve heap challenges to bubble up to freedom.</div>
+
+  <div class="intro-heap">
+    <div class="heap-label">MAX-HEAP  (parent ≥ children)</div>
+    <div class="heap-row">
+      <div class="heap-node root">100</div>
+    </div>
+    <div class="heap-connector"></div>
+    <div class="heap-row">
+      <div class="heap-node">80</div>
+      <div class="heap-node">60</div>
+    </div>
+    <div class="heap-connector"></div>
+    <div class="heap-row">
+      <div class="heap-node">40</div>
+      <div class="heap-node">30</div>
+      <div class="heap-node">20</div>
+      <div class="heap-node">10</div>
+    </div>
+  </div>
+
+  <button id="start-btn" onclick="startGame()">ENTER THE HEAP</button>
+</div>
+
+<div id="crosshair"></div>
+
+<!-- ── HUD ── -->
+<div id="hud">
+  <div id="hud-title">🌿 HEAP ESCAPE</div>
+  <div id="hud-right">
+    <div class="hud-badge" id="room-name-badge">HEAP DUNGEON</div>
+    <div class="hud-badge" id="score-badge">SCORE: 0</div>
+    <div class="hud-badge" id="puzzle-count-badge">LEVELS: 0/3</div>
+  </div>
+</div>
+
+<!-- ── Progress counter ── -->
+<div id="escape-counter">
+  <span class="counter-label">HEAP LEVELS CLEARED</span>
+  <div class="counter-pips">
+    <div class="pip" id="pip-0"></div>
+    <div class="pip" id="pip-1"></div>
+    <div class="pip" id="pip-2"></div>
+  </div>
+  <span class="counter-label" id="counter-text">0 / 3</span>
+</div>
+
+<div id="score-popup">+200 PTS ✓</div>
+
+<!-- ── Room transition ── -->
+<div id="room-transition">
+  <div id="transition-text">HEAPIFYING THE DUNGEON...</div>
+  <div id="transition-sub">BUILDING MAX-HEAP FROM THE ROOTS UP</div>
+</div>
+
+<!-- ── Puzzle Modal ── -->
+<div id="puzzle-modal">
+  <div id="monitor-assembly">
+    <div id="monitor-bezel">
+      <span id="monitor-brand">HEAP·SYS</span>
+      <div id="monitor-screen">
+        <div id="screen-titlebar">
+          <div id="titlebar-dots">
+            <div class="tb-dot red" onclick="tryClosePuzzle()"></div>
+            <div class="tb-dot yellow"></div>
+            <div class="tb-dot green"></div>
+          </div>
+          <div id="titlebar-name">
+            <span id="titlebar-filename">heap_terminal</span>.exe — heap_puzzle
+          </div>
+          <div id="titlebar-right"><span>●●●</span></div>
+        </div>
+        <div id="screen-content">
+          <div class="puzzle-tag" id="puzzle-tag">HEAP OPS</div>
+          <div id="puzzle-title">Loading...</div>
+          <div id="puzzle-difficulty"></div>
+          <hr class="screen-divider">
+          <div id="puzzle-description"></div>
+          <pre id="puzzle-code-block"></pre>
+          <button id="hint-btn" onclick="showHint()">💡 SHOW HINT</button>
+          <div id="hint-text"></div>
+          <div class="options-grid" id="options-grid"></div>
+          <div id="puzzle-feedback"></div>
+          <button id="next-puzzle-btn" onclick="handleNextBtn()">CONTINUE →</button>
+        </div>
+      </div>
+    </div>
+    <div id="monitor-neck"></div>
+    <div id="monitor-base"></div>
+  </div>
+</div>
+
+<!-- ── Victory ── -->
+<div id="victory">
+  <div class="victory-title">🌿 REACHED THE ROOT!</div>
+  <div class="victory-heap">
+    <div class="v-heap-row"><div class="v-node">✓ L1</div></div>
+    <div class="v-heap-row"><div class="v-node">✓ L2</div><div class="v-node">✓ L3</div></div>
+  </div>
+  <div class="victory-sub">ALL HEAP LEVELS CLEARED<br>YOU BUBBLED UP TO FREEDOM</div>
+  <div class="victory-score" id="final-score"></div>
+  <div class="victory-btns">
+    <button class="victory-btn" onclick="location.reload()">PLAY AGAIN</button>
+    <button class="victory-btn secondary" onclick="goToLevels()">← LEVEL SELECT</button>
+  </div>
+</div>
+
+<!-- ── A-Frame Scene ── -->
+<a-scene id="scene" style="display:none" vr-mode-ui="enabled: false" renderer="antialias: true">
+  <a-assets timeout="30000">
+    <a-asset-item id="heap-model" src="/static/heaping.glb"></a-asset-item>
+  </a-assets>
+
+  <a-sky id="room-sky" color="#000f05"></a-sky>
+
+  <a-entity id="heap-room-entity">
+    <!-- Main room model -->
+    <a-gltf-model id="room-floor" src="#heap-model" position="0 0 0" rotation="0 0 0" scale="3 3 3"></a-gltf-model>
+
+    <!-- ── Node Zone 0: Leaf Level ── -->
+    <a-entity id="node-zone-0" class="node-zone" position="-3 0 -1">
+      <!-- Pyramid-stacked boxes to suggest a heap -->
+      <a-box width="0.9" height="0.1" depth="0.3" color="#00ff88" opacity="0.9"
+        position="0 0.12 0"
+        animation__pulse="property:scale;from:1 1 1;to:1.1 1.1 1.1;loop:true;dur:700;dir:alternate;easing:easeInOutSine">
+      </a-box>
+      <a-box width="0.6" height="0.1" depth="0.3" color="#00cc66" opacity="0.7" position="0 0.25 0"></a-box>
+      <a-box width="0.3" height="0.1" depth="0.3" color="#009944" opacity="0.55" position="0 0.38 0"></a-box>
+      <a-light type="point" color="#00ff88" intensity="0.9" distance="4"></a-light>
+      <a-entity id="node-hint-0" position="0 1.8 0" visible="false">
+        <a-plane width="2.0" height="0.32" color="#000f05" opacity="0.92" position="0 0 -0.01" side="double"></a-plane>
+        <a-text value="[ E ]  HEAP PUZZLE 1" align="center" color="#00ff88" scale="0.56 0.56 0.56"></a-text>
+      </a-entity>
+      <a-text value="INSERT" position="0 0.7 0" color="#00ff8844" scale="0.6 0.6 0.6" align="center"></a-text>
+    </a-entity>
+
+    <!-- ── Node Zone 1: Mid Level ── -->
+    <a-entity id="node-zone-1" class="node-zone" position="29.11 1.60 3.90">
+      <a-box width="0.9" height="0.1" depth="0.3" color="#44ffaa" opacity="0.9"
+        position="0 0.12 0"
+        animation__pulse="property:scale;from:1 1 1;to:1.1 1.1 1.1;loop:true;dur:900;dir:alternate;easing:easeInOutSine">
+      </a-box>
+      <a-box width="0.6" height="0.1" depth="0.3" color="#22cc88" opacity="0.7" position="0 0.25 0"></a-box>
+      <a-box width="0.3" height="0.1" depth="0.3" color="#119966" opacity="0.55" position="0 0.38 0"></a-box>
+      <a-light type="point" color="#44ffaa" intensity="0.9" distance="4"></a-light>
+      <a-entity id="node-hint-1" position="0 1.8 0" visible="false">
+        <a-plane width="2.0" height="0.32" color="#000f05" opacity="0.92" position="0 0 -0.01" side="double"></a-plane>
+        <a-text value="[ E ]  HEAP PUZZLE 2" align="center" color="#44ffaa" scale="0.56 0.56 0.56"></a-text>
+      </a-entity>
+      <a-text value="HEAPIFY" position="0 0.7 0" color="#44ffaa44" scale="0.6 0.6 0.6" align="center"></a-text>
+    </a-entity>
+
+    <!-- ── Node Zone 2: Root Level — ESCAPE! ── -->
+    <a-entity id="node-zone-2" class="node-zone" position="-24.99 1.60 0.62">
+      <a-box width="0.9" height="0.1" depth="0.3" color="#00ffcc" opacity="0.9"
+        position="0 0.12 0"
+        animation__pulse="property:scale;from:1 1 1;to:1.15 1.15 1.15;loop:true;dur:550;dir:alternate;easing:easeInOutSine">
+      </a-box>
+      <a-box width="0.6" height="0.1" depth="0.3" color="#00cc99" opacity="0.7" position="0 0.25 0"></a-box>
+      <a-box width="0.3" height="0.1" depth="0.3" color="#009977" opacity="0.55" position="0 0.38 0"></a-box>
+      <a-light type="point" color="#00ffcc" intensity="0.9" distance="4"></a-light>
+      <a-entity id="node-hint-2" position="0 1.8 0" visible="false">
+        <a-plane width="2.4" height="0.32" color="#000f05" opacity="0.92" position="0 0 -0.01" side="double"></a-plane>
+        <a-text value="[ E ]  HEAP PUZZLE 3 — ESCAPE!" align="center" color="#00ffcc" scale="0.52 0.52 0.52"></a-text>
+      </a-entity>
+      <a-text value="EXTRACT" position="0 0.7 0" color="#00ffcc44" scale="0.6 0.6 0.6" align="center"></a-text>
+    </a-entity>
+
+    <!-- Floating ROOT decoration -->
+    <a-entity position="0 1.2 -8">
+      <a-text value="HEAP ROOT = MAX" align="center" color="#00ff8811" scale="2 2 2"></a-text>
+    </a-entity>
+  </a-entity>
+
+  <!-- Lighting -->
+  <a-light type="ambient" color="#ffffff" intensity="1.6"></a-light>
+  <a-light id="main-light" type="point" position="0 4 0" color="#003311" intensity="0.4" distance="20"></a-light>
+  <a-light type="point" position="-3 3 -1"        color="#00ff88" intensity="0.35" distance="8"></a-light>
+  <a-light type="point" position="29.11 4 3.90"   color="#44ffaa" intensity="0.35" distance="8"></a-light>
+  <a-light type="point" position="-24.99 4 0.62"  color="#00ffcc" intensity="0.35" distance="8"></a-light>
+
+  <a-entity id="rig" position="0 0 0">
+    <a-camera look-controls wasd-controls="acceleration: 20" position="0 1.6 0">
+      <a-cursor fuse="false" color="#00ff88" raycaster="objects: .clickable"></a-cursor>
+    </a-camera>
+  </a-entity>
+</a-scene>
+
+<script>
+/* ════════════════════════════════════════════════
+   HEAP PUZZLE BANK — 3 puzzles
+════════════════════════════════════════════════ */
+const HEAP_PUZZLES = [
+  {
+    tag: "HEAP INSERT",
+    title: "Insert & Bubble Up — Where Does It Land?",
+    difficulty: "EASY",
+    description: "A new value is inserted into a Max-Heap.\nNew nodes are always placed at the next available leaf position, then BUBBLE UP by swapping with their parent until the heap property is restored.\nAfter inserting 95 into the heap below, what is the final array representation?",
+    code:
+`Max-Heap as array (index 0 = root):
+  index:  0    1    2    3    4    5
+  value: [90,  70,  80,  40,  60,  50]
+
+Parent–child rule (0-indexed):
+  parent(i)      = floor((i - 1) / 2)
+  left_child(i)  = 2*i + 1
+  right_child(i) = 2*i + 2
+
+Insert 95:
+  Step 1 — place at index 6 (next leaf):
+    [90, 70, 80, 40, 60, 50, 95]
+  Step 2 — bubble up from index 6:
+    parent(6) = floor(5/2) = 2  →  value 80
+    95 > 80  →  SWAP  →  95 at index 2, 80 at index 6
+    [90, 70, 95, 40, 60, 50, 80]
+  Step 3 — continue from index 2:
+    parent(2) = floor(1/2) = 0  →  value 90
+    95 > 90  →  SWAP  →  95 at index 0, 90 at index 2
+    [95, 70, 90, 40, 60, 50, 80]
+  Step 4 — index 0 is root.  STOP.
+
+# Final array = ?`,
+    hint: "Bubble Up compares the inserted node with its parent at floor((i-1)/2) and swaps if the child is larger. Keep going until reaching the root or no swap is needed.",
+    options: [
+      "[95, 70, 90, 40, 60, 50, 80]",
+      "[95, 90, 80, 40, 60, 50, 70]",
+      "[90, 70, 95, 40, 60, 50, 80]",
+      "[95, 70, 80, 40, 60, 50, 90]"
+    ],
+    answer: 0,
+    explanation: "✓ Correct! 95 was placed at index 6, swapped with 80 (index 2), then swapped with 90 (index 0). Final heap: [95, 70, 90, 40, 60, 50, 80].",
+    points: 150
+  },
+  {
+    tag: "HEAPIFY / EXTRACT-MAX",
+    title: "Extract-Max & Sift Down",
+    difficulty: "MEDIUM",
+    description: "EXTRACT-MAX removes the root (maximum element) from a Max-Heap.\nThe last element is moved to the root, then SIFTED DOWN by repeatedly swapping with the LARGER child until the heap property is restored.\nTrace the sift-down below. What is the final array after extracting the max?",
+    code:
+`Max-Heap before extraction:
+  index:  0    1    2    3    4    5    6
+  value: [80,  60,  75,  20,  40,  65,  30]
+
+Extract-Max steps:
+  1. Remove root (80).  Move last element (30) to root:
+     [30,  60,  75,  20,  40,  65,  _]
+     array size is now 6: [30, 60, 75, 20, 40, 65]
+
+  2. Sift-down from index 0 (value 30):
+     children: left=index 1 (60), right=index 2 (75)
+     larger child = 75 (index 2)
+     30 < 75  →  SWAP  →  [75, 60, 30, 20, 40, 65]
+
+  3. Continue sift-down from index 2 (value 30):
+     children: left=index 5 (65), right=index 6 → out of bounds
+     larger child = 65 (index 5)
+     30 < 65  →  SWAP  →  [75, 60, 65, 20, 40, 30]
+
+  4. Continue from index 5 (value 30):
+     children: left=index 11, right=index 12 → both out of bounds
+     STOP.
+
+# Final array after extract-max = ?`,
+    hint: "Sift-Down always swaps with the LARGER of the two children, not just any child larger than the parent. This ensures the max-heap property is preserved at every level.",
+    options: [
+      "[75, 60, 65, 20, 40, 30]",
+      "[75, 60, 30, 20, 40, 65]",
+      "[65, 60, 30, 20, 40, 75]",
+      "[75, 40, 65, 20, 30, 60]"
+    ],
+    answer: 0,
+    explanation: "✓ Correct! After extracting 80, 30 sifted down: swapped with 75 (larger child at index 2), then swapped with 65 (child at index 5). Final heap: [75, 60, 65, 20, 40, 30].",
+    points: 250
+  },
+  {
+    tag: "HEAP SORT",
+    title: "Heap Sort — Build Heap & Sort Order",
+    difficulty: "HARD",
+    description: "Heap Sort works in two phases:\n1. BUILD-MAX-HEAP: heapify the entire array in O(n)\n2. SORT: repeatedly extract-max and place it at the end.\nTrace Phase 2 on the heap below. What is the final sorted array (ascending)?",
+    code:
+`After BUILD-MAX-HEAP, the array is:
+  [90, 70, 80, 30, 60, 50, 40]
+   i=0  i=1  i=2  i=3  i=4  i=5  i=6
+
+Heap Sort Phase 2 — for heap_size from 6 down to 1:
+
+  Pass 1 (heap_size=6):
+    Swap arr[0] ↔ arr[6]:  [40, 70, 80, 30, 60, 50, 90]
+    Sift-down [40] in heap_size=6 → [80, 70, 50, 30, 60, 40 | 90]
+
+  Pass 2 (heap_size=5):
+    Swap arr[0] ↔ arr[5]:  [40, 70, 50, 30, 60, 80 | 90]
+    Sift-down [40] in heap_size=5 → [70, 60, 50, 30, 40 | 80, 90]
+
+  Pass 3 (heap_size=4):
+    Swap arr[0] ↔ arr[4]:  [40, 60, 50, 30, 70 | 80, 90]
+    Sift-down [40] → [60, 40, 50, 30 | 70, 80, 90]
+
+  Pass 4 (heap_size=3):
+    Swap arr[0] ↔ arr[3]:  [30, 40, 50, 60 | 70, 80, 90]
+    Sift-down [30] → [50, 40, 30 | 60, 70, 80, 90]
+
+  Pass 5 (heap_size=2):
+    Swap arr[0] ↔ arr[2]:  [30, 40, 50 | 60, 70, 80, 90]
+    Sift-down [30] → [40, 30 | 50, 60, 70, 80, 90]
+
+  Pass 6 (heap_size=1):
+    Swap arr[0] ↔ arr[1]:  [30, 40 | 50, 60, 70, 80, 90]
+    heap_size = 0  →  DONE
+
+# Final sorted array = ?`,
+    hint: "Each pass extracts the maximum (root) and places it at the end of the unsorted portion. After all passes the array is sorted ascending — smallest at index 0, largest at the end.",
+    options: [
+      "[30, 40, 50, 60, 70, 80, 90]",
+      "[90, 80, 70, 60, 50, 40, 30]",
+      "[40, 30, 50, 60, 70, 80, 90]",
+      "[30, 40, 60, 50, 70, 80, 90]"
+    ],
+    answer: 0,
+    explanation: "✓ Correct! Heap Sort always produces ascending order. Each extract-max places the current max at the sorted tail. Final result: [30, 40, 50, 60, 70, 80, 90].",
+    points: 300
+  }
+];
+
+/* ════════════════════════════════════════════════
+   GAME STATE
+════════════════════════════════════════════════ */
+const TOTAL_PUZZLES = 3;
+let totalScore     = 0;
+let solvedCount    = 0;
+let puzzleActive   = false;
+let canClose       = false;
+let nearNode       = -1;
+let currentNodeIdx = -1;
+const nodeSolved   = [false, false, false];
+let nextBtnAction  = null;
+
+const NODE_ZONES = [
+  { x: -3,     z: -1   },
+  { x:  29.11, z:  3.90 },
+  { x: -24.99, z:  0.62 }
+];
+const NODE_DIST = 2.0;
+
+/* ════════════════════════════════════════════════
+   START
+════════════════════════════════════════════════ */
+function startGame() {
+  document.getElementById('intro').classList.add('fade-out');
+  const sceneEl = document.getElementById('scene');
+  sceneEl.style.display = '';
+  setTimeout(() => document.getElementById('intro').style.display = 'none', 800);
+
+  const overlay = document.getElementById('room-transition');
+  overlay.classList.add('active');
+  setTimeout(() => overlay.classList.remove('active'), 2200);
+
+  const doLoad = () => { startProximityLoop(); };
+  if (sceneEl.hasLoaded) doLoad();
+  else sceneEl.addEventListener('loaded', doLoad, { once: true });
+
+  document.getElementById('room-name-badge').textContent    = '🌿 HEAP DUNGEON';
+  document.getElementById('puzzle-count-badge').textContent = `LEVELS: 0/${TOTAL_PUZZLES}`;
+}
+
+/* ════════════════════════════════════════════════
+   KEYBOARD — [E] opens puzzle when near a node
+════════════════════════════════════════════════ */
+window.addEventListener('keydown', (e) => {
+  if (document.getElementById('puzzle-modal').classList.contains('open')) return;
+  if (e.key === 'e' || e.key === 'E') {
+    if (nearNode >= 0 && !nodeSolved[nearNode]) {
+      openNodePuzzle(nearNode);
+    }
+  }
+});
+
+/* ════════════════════════════════════════════════
+   PLAYER POSITION
+════════════════════════════════════════════════ */
+function getPlayerPos() {
+  const cam = document.querySelector('a-camera');
+  if (cam && cam.object3D) {
+    const wp = new THREE.Vector3();
+    cam.object3D.getWorldPosition(wp);
+    return wp;
+  }
+  const rig = document.getElementById('rig');
+  return rig && rig.object3D ? rig.object3D.position : null;
+}
+
+/* ════════════════════════════════════════════════
+   PROXIMITY LOOP
+════════════════════════════════════════════════ */
+function startProximityLoop() {
+  setInterval(() => {
+    if (document.getElementById('puzzle-modal').classList.contains('open')) return;
+    const p = getPlayerPos();
+    if (!p) return;
+
+    console.log(`Position: X=${p.x.toFixed(2)}, Y=${p.y.toFixed(2)}, Z=${p.z.toFixed(2)}`);
+
+    let foundIdx = -1;
+    NODE_ZONES.forEach((nz, i) => {
+      const hint = document.getElementById(`node-hint-${i}`);
+      if (nodeSolved[i]) {
+        if (hint) hint.setAttribute('visible', false);
+        return;
+      }
+      const dist = Math.hypot(p.x - nz.x, p.z - nz.z);
+      if (dist < NODE_DIST) {
+        foundIdx = i;
+        if (hint) hint.setAttribute('visible', true);
+      } else {
+        if (hint) hint.setAttribute('visible', false);
+      }
+    });
+
+    if (foundIdx !== nearNode) {
+      nearNode = foundIdx;
+      if (foundIdx >= 0 && !nodeSolved[foundIdx]) {
+        const labels = ['1: Insert & Bubble Up', '2: Extract-Max & Sift Down', '3: Heap Sort — ESCAPE!'];
+        showToast(`Near Level ${foundIdx + 1} — Press [E] for Puzzle ${labels[foundIdx]}`);
+      } else {
+        hideToast();
+      }
+    }
+  }, 150);
+}
+
+/* ════════════════════════════════════════════════
+   OPEN PUZZLE
+════════════════════════════════════════════════ */
+function openNodePuzzle(idx) {
+  const puzzle = HEAP_PUZZLES[idx];
+  puzzleActive   = true;
+  canClose       = false;
+  currentNodeIdx = idx;
+  hideToast();
+
+  populateModal(puzzle, `heap_puzzle_${idx + 1}`);
+  document.querySelectorAll('.option-btn').forEach((btn, i) => {
+    btn.onclick = () => checkAnswer(i, idx, btn);
+  });
+  document.getElementById('puzzle-modal').classList.add('open');
+  document.getElementById('screen-content').scrollTop = 0;
+}
+
+/* ════════════════════════════════════════════════
+   CHECK ANSWER
+════════════════════════════════════════════════ */
+function checkAnswer(chosen, nodeIdx, btnEl) {
+  if (!puzzleActive) return;
+  const puzzle = HEAP_PUZZLES[nodeIdx];
+
+  document.querySelectorAll('.option-btn').forEach(b => b.style.pointerEvents = 'none');
+  const feedback = document.getElementById('puzzle-feedback');
+
+  if (chosen === puzzle.answer) {
+    btnEl.classList.add('correct');
+    feedback.className     = 'success';
+    feedback.textContent   = puzzle.explanation;
+    feedback.style.display = 'block';
+
+    totalScore += puzzle.points;
+    document.getElementById('score-badge').textContent = `SCORE: ${totalScore}`;
+    showScorePopup(`+${puzzle.points} PTS ✓`);
+
+    nodeSolved[nodeIdx] = true;
+    solvedCount++;
+
+    const zone = document.getElementById(`node-zone-${nodeIdx}`);
+    if (zone) {
+      zone.querySelectorAll('a-box').forEach(box => {
+        box.setAttribute('color', '#004422');
+        box.setAttribute('opacity', '0.25');
+      });
+    }
+
+    updateProgress();
+    puzzleActive = false;
+    canClose     = true;
+
+    setTimeout(() => {
+      const btn    = document.getElementById('next-puzzle-btn');
+      const isLast = solvedCount >= TOTAL_PUZZLES;
+      btn.textContent = isLast ? '🏆 REACH THE ROOT!' : 'CLOSE ✓';
+      nextBtnAction = () => {
+        closePuzzle();
+        if (isLast) setTimeout(showVictory, 600);
+      };
+      btn.style.display = 'block';
+    }, 800);
+
+  } else {
+    btnEl.classList.add('wrong');
+    feedback.className     = 'fail';
+    feedback.textContent   = '✗ Not quite! Read the hint below, then try again.';
+    feedback.style.display = 'block';
+
+    document.getElementById('hint-text').style.display = 'block';
+
+    puzzleActive = false;
+    canClose     = true;
+
+    setTimeout(() => {
+      const btn     = document.getElementById('next-puzzle-btn');
+      btn.textContent = '↺  TRY AGAIN';
+      nextBtnAction = () => {
+        closePuzzle();
+        setTimeout(() => openNodePuzzle(nodeIdx), 220);
+      };
+      btn.style.display = 'block';
+    }, 600);
+  }
+}
+
+function handleNextBtn() { if (nextBtnAction) nextBtnAction(); }
+function tryClosePuzzle() { if (canClose) closePuzzle(); }
+
+/* ════════════════════════════════════════════════
+   PROGRESS COUNTER
+════════════════════════════════════════════════ */
+function updateProgress() {
+  for (let i = 0; i < TOTAL_PUZZLES; i++) {
+    const pip = document.getElementById(`pip-${i}`);
+    if (pip) pip.classList.toggle('filled', i < solvedCount);
+  }
+  document.getElementById('counter-text').textContent       = `${solvedCount} / ${TOTAL_PUZZLES}`;
+  document.getElementById('puzzle-count-badge').textContent = `LEVELS: ${solvedCount}/${TOTAL_PUZZLES}`;
+}
+
+/* ════════════════════════════════════════════════
+   VICTORY
+════════════════════════════════════════════════ */
+function showVictory() {
+  document.getElementById('final-score').textContent = `FINAL SCORE: ${totalScore} PTS`;
+  document.getElementById('victory').classList.add('open');
+}
+
+function goToLevels() {
+  document.body.style.transition = 'opacity .6s';
+  document.body.style.opacity    = '0';
+  setTimeout(() => { window.location.href = '/level'; }, 650);
+}
+
+/* ════════════════════════════════════════════════
+   MODAL RENDERER
+════════════════════════════════════════════════ */
+function populateModal(puzzle, filename) {
+  document.getElementById('titlebar-filename').textContent  = filename;
+  document.getElementById('puzzle-tag').textContent         = puzzle.tag;
+  document.getElementById('puzzle-title').textContent       = puzzle.title;
+  const cls = { EASY:'diff-easy', MEDIUM:'diff-medium', HARD:'diff-hard' }[puzzle.difficulty];
+  document.getElementById('puzzle-difficulty').innerHTML    = `<span class="${cls}">◆ ${puzzle.difficulty}</span>`;
+  document.getElementById('puzzle-description').textContent = puzzle.description;
+  document.getElementById('puzzle-code-block').textContent  = puzzle.code;
+  document.getElementById('hint-text').style.display        = 'none';
+  document.getElementById('hint-text').textContent          = '💡 ' + puzzle.hint;
+  document.getElementById('puzzle-feedback').className      = '';
+  document.getElementById('puzzle-feedback').style.display  = 'none';
+  document.getElementById('next-puzzle-btn').style.display  = 'none';
+  nextBtnAction = null;
+
+  const grid = document.getElementById('options-grid');
+  grid.innerHTML = '';
+  puzzle.options.forEach((opt, i) => {
+    const btn       = document.createElement('button');
+    btn.className   = 'option-btn';
+    btn.textContent = `${['A','B','C','D'][i]}.  ${opt}`;
+    grid.appendChild(btn);
+  });
+}
+
+/* ════════════════════════════════════════════════
+   HELPERS
+════════════════════════════════════════════════ */
+function closePuzzle() {
+  document.getElementById('puzzle-modal').classList.remove('open');
+  puzzleActive   = false;
+  canClose       = false;
+  currentNodeIdx = -1;
+}
+
+function showHint() {
+  document.getElementById('hint-text').style.display = 'block';
+}
+
+function showScorePopup(msg) {
+  const p = document.getElementById('score-popup');
+  p.textContent   = msg;
+  p.style.display = 'block';
+  setTimeout(() => p.style.display = 'none', 2000);
+}
+
+function showToast(msg) {
+  let t = document.getElementById('proximity-toast');
+  if (!t) {
+    t     = document.createElement('div');
+    t.id  = 'proximity-toast';
+    t.style.cssText = `position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#000f05;border:1px solid #00ff8888;color:#44ffaa;font-family:'Share Tech Mono',monospace;font-size:0.85rem;letter-spacing:2px;padding:12px 28px;border-radius:3px;z-index:150;pointer-events:none;`;
+    document.body.appendChild(t);
+  }
+  t.textContent   = msg;
+  t.style.display = 'block';
+}
+
+function hideToast() {
+  const t = document.getElementById('proximity-toast');
+  if (t) t.style.display = 'none';
+}
+</script>
+</body>
+</html>

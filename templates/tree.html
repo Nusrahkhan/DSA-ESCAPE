@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>TREES Escape Room</title>
+  <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap');
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Share Tech Mono', monospace; background: #000; overflow: hidden; }
+    #hud { position: fixed; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; align-items: center; padding: 16px 28px; background: linear-gradient(180deg, rgba(0,0,0,0.85) 0%, transparent 100%); z-index: 100; pointer-events: none; }
+    #hud-title { font-family: 'Orbitron', monospace; font-size: 1.1rem; font-weight: 900; color: #00ffcc; letter-spacing: 3px; text-shadow: 0 0 20px #00ffcc88; }
+    #hud-right { display: flex; gap: 24px; align-items: center; }
+    .hud-badge { font-size: 0.75rem; color: #aaffee; letter-spacing: 2px; border: 1px solid #00ffcc44; padding: 6px 14px; border-radius: 2px; background: rgba(0,255,204,0.06); }
+    #room-name-badge { font-family: 'Orbitron', monospace; color: #ffcc00; border-color: #ffcc0044; background: rgba(255,204,0,0.06); text-shadow: 0 0 10px #ffcc0066; }
+    #timer-badge { font-family: 'Orbitron', monospace; }
+
+    /* ── Puzzle Modal (monitor) ── */
+    #puzzle-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.96); z-index: 200; justify-content: center; align-items: center; }
+    #puzzle-modal.open { display: flex; }
+    #monitor-assembly { display: flex; flex-direction: column; align-items: center; animation: monitorPowerOn 0.4s ease; }
+    @keyframes monitorPowerOn { 0% { opacity:0; transform:scale(0.94) translateY(20px); filter:brightness(3); } 60% { opacity:1; filter:brightness(1.3); } 100% { transform:scale(1) translateY(0); filter:brightness(1); } }
+    #monitor-bezel { background: linear-gradient(160deg, #2c2c2c 0%, #1c1c1c 40%, #141414 100%); border-radius: 12px 12px 4px 4px; padding: 18px 18px 22px; box-shadow: 0 0 0 1px #111, 0 0 0 2px #333, 4px 4px 20px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.08), inset 0 -2px 6px rgba(0,0,0,0.6); width: min(760px, 94vw); position: relative; }
+    #monitor-bezel::after { content: ''; position: absolute; bottom: 10px; right: 22px; width: 7px; height: 7px; border-radius: 50%; background: #00ff88; box-shadow: 0 0 6px #00ff88, 0 0 12px #00ff8866; animation: ledBlink 3s ease-in-out infinite; }
+    @keyframes ledBlink { 0%,90%,100% { opacity:1; } 95% { opacity:0.3; } }
+    #monitor-brand { position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); font-family: 'Orbitron', monospace; font-size: 0.55rem; color: #444; letter-spacing: 4px; }
+    #monitor-screen { background: #000d14; border-radius: 4px; overflow: hidden; position: relative; border: 2px solid #0a0a0a; box-shadow: inset 0 0 60px rgba(0,20,30,0.9), inset 0 0 120px rgba(0,255,204,0.03), 0 0 30px rgba(0,255,204,0.08); }
+    #monitor-screen::before { content: ''; position: absolute; inset: 0; z-index: 100; pointer-events: none; background: repeating-linear-gradient(0deg, transparent 0px, transparent 2px, rgba(0,0,0,0.18) 2px, rgba(0,0,0,0.18) 3px); }
+    #monitor-screen::after { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 35%; z-index: 101; pointer-events: none; background: linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 50%, transparent 100%); border-radius: 4px 4px 0 0; }
+    #screen-titlebar { background: linear-gradient(90deg, #0a1e2a 0%, #0d2535 50%, #0a1e2a 100%); border-bottom: 1px solid #00ffcc22; padding: 0; display: flex; align-items: stretch; height: 36px; position: relative; z-index: 10; }
+    #titlebar-dots { display: flex; align-items: center; gap: 7px; padding: 0 14px; border-right: 1px solid #00ffcc11; }
+    .tb-dot { width: 12px; height: 12px; border-radius: 50%; cursor: pointer; transition: filter 0.15s; }
+    .tb-dot:hover { filter: brightness(1.3); }
+    .tb-dot.red    { background: radial-gradient(circle at 35% 35%, #ff7070, #cc3333); box-shadow: 0 0 4px #cc333366; }
+    .tb-dot.yellow { background: radial-gradient(circle at 35% 35%, #ffdd70, #ccaa00); box-shadow: 0 0 4px #ccaa0066; }
+    .tb-dot.green  { background: radial-gradient(circle at 35% 35%, #70ff99, #00aa44); box-shadow: 0 0 4px #00aa4466; }
+    #titlebar-name { flex:1; display:flex; align-items:center; justify-content:center; font-size:0.65rem; color:#3a7a8a; letter-spacing:2px; }
+    #titlebar-name span { color: #00ccaa; }
+    #titlebar-right { display:flex; align-items:center; padding:0 12px; gap:10px; border-left:1px solid #00ffcc11; font-size:0.6rem; color:#2a5a6a; }
+    #screen-content { padding: 20px 24px 24px; max-height: calc(80vh - 36px); overflow-y: auto; position: relative; z-index: 10; color: #c8ffe8; }
+    #screen-content::-webkit-scrollbar { width: 6px; }
+    #screen-content::-webkit-scrollbar-track { background: #020e14; }
+    #screen-content::-webkit-scrollbar-thumb { background: #00ffcc33; border-radius: 3px; }
+    .puzzle-tag { font-size:0.6rem; letter-spacing:4px; color:#00ffcc88; margin-bottom:10px; display:flex; align-items:center; gap:6px; }
+    .puzzle-tag::before { content:'▸▸'; color:#00ffcc44; }
+    #puzzle-title { font-family:'Orbitron',monospace; font-size:1.2rem; font-weight:700; color:#e0fff8; margin-bottom:6px; line-height:1.3; text-shadow:0 0 20px rgba(0,255,200,0.2); }
+    #puzzle-difficulty { font-size:0.68rem; letter-spacing:2px; margin-bottom:18px; }
+    .diff-easy   { color:#00ff99; text-shadow:0 0 8px #00ff9944; }
+    .diff-medium { color:#ffaa00; text-shadow:0 0 8px #ffaa0044; }
+    .diff-hard   { color:#ff4466; text-shadow:0 0 8px #ff446644; }
+    .screen-divider { border:none; border-top:1px solid #00ffcc18; margin:0 0 16px 0; }
+    #puzzle-description { color:#7ab8c0; font-size:0.84rem; line-height:1.75; margin-bottom:16px; padding:10px 12px; background:rgba(0,255,204,0.025); border-left:2px solid #00ffcc33; border-radius:0 3px 3px 0; }
+    #puzzle-code-block { background:#020c10; border:1px solid #0d2530; border-top:2px solid #00ffcc22; border-radius:3px; padding:14px 16px; margin-bottom:16px; font-size:0.8rem; color:#3de8a0; white-space:pre; overflow-x:auto; line-height:1.65; position:relative; }
+    #puzzle-code-block::before { content:'CODE'; position:absolute; top:-9px; left:10px; background:#020c10; padding:0 6px; font-size:0.52rem; color:#00ffcc44; letter-spacing:3px; }
+    #hint-btn { background:none; border:1px solid #ffcc0022; color:#ffcc0044; font-family:'Share Tech Mono',monospace; font-size:0.68rem; letter-spacing:2px; padding:6px 14px; cursor:pointer; border-radius:2px; margin-bottom:14px; transition:all 0.2s; display:block; }
+    #hint-btn:hover { border-color:#ffcc00aa; color:#ffcc00; background:rgba(255,204,0,0.05); }
+    #hint-text { display:none; color:#ffcc0077; font-size:0.76rem; margin-bottom:14px; padding:8px 12px; background:rgba(255,204,0,0.04); border-left:2px solid #ffcc0033; border-radius:0 3px 3px 0; }
+    .options-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:16px; }
+    .option-btn { background:rgba(0,20,35,0.8); border:1px solid #0d2a3a; color:#4abfc8; font-family:'Share Tech Mono',monospace; font-size:0.79rem; padding:12px 14px; border-radius:3px; cursor:pointer; text-align:left; transition:all 0.18s; position:relative; overflow:hidden; }
+    .option-btn::before { content:''; position:absolute; left:0; top:0; bottom:0; width:2px; background:#00ffcc; opacity:0; transition:opacity 0.15s; }
+    .option-btn:hover { border-color:#00ffcc44; color:#b0fff0; background:rgba(0,255,204,0.05); }
+    .option-btn:hover::before { opacity:1; }
+    .option-btn.correct { background:rgba(0,40,25,0.9); border-color:#00ff9966; color:#00ff99; box-shadow:0 0 12px rgba(0,255,150,0.1); }
+    .option-btn.correct::before { opacity:1; background:#00ff99; }
+    .option-btn.wrong { background:rgba(30,0,15,0.9); border-color:#ff446655; color:#ff7799; }
+    #puzzle-feedback { font-size:0.8rem; margin-bottom:14px; padding:11px 14px; border-radius:3px; display:none; line-height:1.55; }
+    #puzzle-feedback.success { background:rgba(0,30,18,0.9); border:1px solid #00ff9933; border-left:3px solid #00ff99; color:#88ffcc; display:block; }
+    #puzzle-feedback.fail    { background:rgba(25,0,12,0.9); border:1px solid #ff446633; border-left:3px solid #ff4466; color:#ff9ab0; display:block; }
+    #next-room-btn { display:none; background:transparent; border:1px solid #00ffcc66; color:#00ffcc; font-family:'Share Tech Mono',monospace; font-size:0.75rem; letter-spacing:3px; padding:11px 26px; cursor:pointer; border-radius:2px; margin-top:4px; transition:all 0.2s; }
+    #next-room-btn:hover { background:rgba(0,255,204,0.08); border-color:#00ffcc; color:#fff; box-shadow:0 0 16px rgba(0,255,204,0.2); }
+    #monitor-neck { width:50px; height:16px; background:linear-gradient(90deg,#1a1a1a,#2a2a2a,#1a1a1a); clip-path:polygon(20% 0%,80% 0%,90% 100%,10% 100%); }
+    #monitor-base { width:180px; height:10px; background:linear-gradient(180deg,#252525,#1a1a1a); border-radius:0 0 8px 8px; box-shadow:0 4px 12px rgba(0,0,0,0.6); }
+
+    /* ── Room Transition ── */
+    #room-transition { display:none; position:fixed; inset:0; z-index:300; background:#000; justify-content:center; align-items:center; flex-direction:column; gap:16px; }
+    #room-transition.active { display:flex; animation:fadeInOut 2s forwards; }
+    @keyframes fadeInOut { 0%{opacity:0;} 30%{opacity:1;} 70%{opacity:1;} 100%{opacity:0;pointer-events:none;} }
+    #transition-text { font-family:'Orbitron',monospace; font-size:1.4rem; font-weight:700; color:#00ffcc; letter-spacing:4px; text-align:center; text-shadow:0 0 30px #00ffcc; }
+    #transition-sub { color:#446680; font-size:0.75rem; letter-spacing:3px; }
+
+    #crosshair { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); width:20px; height:20px; pointer-events:none; z-index:50; }
+    #crosshair::before, #crosshair::after { content:''; position:absolute; background:rgba(255,255,255,0.7); border-radius:1px; }
+    #crosshair::before { width:2px; height:100%; left:50%; transform:translateX(-50%); }
+    #crosshair::after  { width:100%; height:2px; top:50%; transform:translateY(-50%); }
+
+    /* ── Intro ── */
+    #intro { position:fixed; inset:0; background:#000; z-index:999; display:flex; flex-direction:column; justify-content:center; align-items:center; gap:24px; }
+    #intro.fade-out { animation:fadeOut 0.8s forwards; }
+    @keyframes fadeOut { to { opacity:0; pointer-events:none; } }
+    .intro-title { font-family:'Orbitron',monospace; font-size:clamp(2rem,6vw,4rem); font-weight:900; color:#00ffcc; text-align:center; text-shadow:0 0 40px #00ffcc99; letter-spacing:4px; }
+    .intro-sub { color:#446680; font-size:0.85rem; letter-spacing:3px; text-align:center; }
+    .intro-rooms { display:flex; gap:16px; flex-wrap:wrap; justify-content:center; max-width:500px; }
+    .room-chip { border:1px solid #1a3a44; padding:8px 18px; color:#5af0b8; font-size:0.75rem; letter-spacing:2px; border-radius:2px; background:#071520; }
+    #start-btn { background:transparent; border:2px solid #00ffcc; color:#00ffcc; font-family:'Orbitron',monospace; font-weight:700; font-size:0.9rem; letter-spacing:4px; padding:16px 48px; cursor:pointer; border-radius:2px; transition:all 0.3s; margin-top:10px; }
+    #start-btn:hover { background:#00ffcc; color:#000; box-shadow:0 0 40px #00ffcc88; }
+
+    #score-popup { position:fixed; top:80px; right:28px; z-index:150; display:none; background:#003322; border:1px solid #00ff9966; color:#00ff99; font-size:0.8rem; padding:10px 20px; border-radius:3px; letter-spacing:1px; animation:popIn 0.3s ease; }
+    @keyframes popIn { from{transform:scale(0.8) translateY(-10px);opacity:0;} to{transform:scale(1);opacity:1;} }
+
+    /* ── Victory / Escape popup ── */
+    #victory { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.95); z-index:500; flex-direction:column; justify-content:center; align-items:center; gap:20px; }
+    #victory.open { display:flex; }
+    .victory-title { font-family:'Orbitron',monospace; font-size:3rem; font-weight:900; color:#00ffcc; text-shadow:0 0 60px #00ffcc; animation:pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{text-shadow:0 0 60px #00ffcc;} 50%{text-shadow:0 0 100px #00ffcc,0 0 120px #ffcc00;} }
+    .victory-sub { color:#aaffee; font-size:1rem; letter-spacing:2px; text-align:center; }
+    .victory-score { color:#ffcc00; font-size:1.3rem; margin-top:10px; }
+    .victory-btns { display:flex; gap:16px; margin-top:20px; }
+    .victory-btn { background:none; border:2px solid #00ffcc; color:#00ffcc; font-family:'Orbitron',monospace; font-size:0.8rem; letter-spacing:3px; padding:14px 32px; cursor:pointer; border-radius:2px; transition:all 0.3s; }
+    .victory-btn:hover { background:#00ffcc; color:#000; box-shadow:0 0 30px #00ffcc88; }
+    .victory-btn.secondary { border-color:#ffcc00; color:#ffcc00; }
+    .victory-btn.secondary:hover { background:#ffcc00; color:#000; box-shadow:0 0 30px #ffcc0088; }
+
+    /* ── Escape counter ── */
+    #escape-counter {
+      position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%);
+      z-index: 150; display: flex; align-items: center; gap: 10px;
+      background: rgba(0,10,20,0.88); border: 1px solid #00ffcc33;
+      padding: 10px 24px; border-radius: 4px; pointer-events: none;
+    }
+    .counter-label { font-size: 0.65rem; letter-spacing: 3px; color: #446680; }
+    .counter-pips { display: flex; gap: 8px; }
+    .pip { width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid #00ffcc44; background: transparent; transition: all 0.4s; }
+    .pip.filled { background: #00ffcc; border-color: #00ffcc; box-shadow: 0 0 10px #00ffcc; }
+    .pip-divider { margin-left: 10px; border-color: #00ffcc88; }
+
+    a-scene { cursor: pointer; }
+  </style>
+</head>
+<body>
+
+<div id="intro">
+  <div class="intro-title">TREES<br>ESCAPE ROOM</div>
+  <div class="intro-sub">SOLVE TREES PUZZLES TO ESCAPE</div>
+  <div class="intro-rooms">
+    <div class="room-chip">🌲 BINARY TREES</div>
+  </div>
+  <button id="start-btn" onclick="startGame()">ENTER THE ROOM</button>
+</div>
+
+<div id="crosshair"></div>
+
+<div id="hud">
+  <div id="hud-title">◈ DSA ESCAPE ROOM</div>
+  <div id="hud-right">
+    <div class="hud-badge" id="timer-badge">TIME: 2:00</div>
+    <div class="hud-badge" id="room-name-badge">ROOM 1</div>
+    <div class="hud-badge" id="score-badge">SCORE: 0</div>
+    <div class="hud-badge" id="puzzle-count-badge">PUZZLES: 0/0</div>
+  </div>
+</div>
+
+<!-- Escape progress counter (bottom center) -->
+<div id="escape-counter">
+  <span class="counter-label">ESCAPE PROGRESS</span>
+  <div class="counter-pips">
+    <div class="pip" id="pip-0"></div>
+    <div class="pip" id="pip-1"></div>
+    <div class="pip pip-divider" id="pip-2"></div>
+    <div class="pip" id="pip-3"></div>
+    <div class="pip" id="pip-4"></div>
+  </div>
+  <span class="counter-label" id="counter-text">0 / 5</span>
+</div>
+
+<div id="score-popup">+100 PTS ✓</div>
+
+<div id="room-transition">
+  <div id="transition-text">ENTERING GARDEN...</div>
+  <div id="transition-sub">LOADING NEXT AREA</div>
+</div>
+
+<div id="puzzle-modal">
+  <div id="monitor-assembly">
+    <div id="monitor-bezel">
+      <span id="monitor-brand">DSA·SYSTEMS</span>
+      <div id="monitor-screen">
+        <div id="screen-titlebar">
+          <div id="titlebar-dots">
+            <div class="tb-dot red" onclick="closePuzzle()"></div>
+            <div class="tb-dot yellow"></div>
+            <div class="tb-dot green"></div>
+          </div>
+          <div id="titlebar-name">
+            <span id="titlebar-filename">dsa_terminal</span>.exe — puzzle_01
+          </div>
+          <div id="titlebar-right"><span>●●●</span></div>
+        </div>
+        <div id="screen-content">
+          <div class="puzzle-tag" id="puzzle-tag">DSA CHALLENGE</div>
+          <div id="puzzle-title">Loading...</div>
+          <div id="puzzle-difficulty"></div>
+          <hr class="screen-divider">
+          <div id="puzzle-description"></div>
+          <pre id="puzzle-code-block"></pre>
+          <button id="hint-btn" onclick="showHint()">💡 SHOW HINT</button>
+          <div id="hint-text"></div>
+          <div class="options-grid" id="options-grid"></div>
+          <div id="puzzle-feedback"></div>
+          <button id="next-room-btn" onclick="goNextRoom()">NEXT ROOM →</button>
+        </div>
+      </div>
+    </div>
+    <div id="monitor-neck"></div>
+    <div id="monitor-base"></div>
+  </div>
+</div>
+
+<!-- Victory / Escaped popup -->
+<div id="victory">
+  <div class="victory-title">🏆 ESCAPED!</div>
+  <div class="victory-sub">YOU MASTERED ALL DSA CHALLENGES<br>IN THE GARDEN OF ALGORITHMS</div>
+  <div class="victory-score" id="final-score"></div>
+  <div class="victory-btns">
+    <button class="victory-btn" onclick="location.reload()">PLAY AGAIN</button>
+    <button class="victory-btn secondary" onclick="goToLevels()">← LEVEL SELECT</button>
+  </div>
+</div>
+
+<!-- ── Did Not Escape ── -->
+<div id="did-not-escape" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.95);z-index:500;flex-direction:column;justify-content:center;align-items:center;gap:20px;">
+  <div style="font-family:'Orbitron',monospace;font-size:3rem;font-weight:900;color:#ff4444;text-shadow:0 0 60px #ff4444;animation:pulse 2s infinite;">⏰ TIME'S UP</div>
+  <div style="color:#ffaaaa;font-size:1rem;letter-spacing:2px;text-align:center;">YOU DID NOT ESCAPE<br>THE DUNGEON LOCKED DOWN</div>
+  <div style="color:#ffcc00;font-size:1.3rem;margin-top:10px;" id="timeout-score"></div>
+  <div style="display:flex;gap:16px;margin-top:20px;">
+    <button class="victory-btn" onclick="location.reload()">TRY AGAIN</button>
+    <button class="victory-btn secondary" onclick="goToLevels()">← LEVEL SELECT</button>
+  </div>
+</div>
+
+<a-scene id="scene" style="display:none" vr-mode-ui="enabled: false" renderer="antialias: true">
+  <a-assets timeout="30000">
+    <a-asset-item id="room-model"     src="/static/scifi-room.glb"></a-asset-item>
+    <a-asset-item id="computer-model" src="/static/Shelf.glb"></a-asset-item>
+    <a-asset-item id="desk-model"     src="/static/Desk.glb"></a-asset-item>
+    <a-asset-item id="couch-model"    src="/static/Couch.glb"></a-asset-item>
+    <a-asset-item id="door-model"     src="/static/metal_door.glb"></a-asset-item>
+    <a-asset-item id="garden-model"   src="/static/garden.glb"></a-asset-item>
+    <a-asset-item id="lamp-model"     src="/static/floor_lamp.glb"></a-asset-item>
+  </a-assets>
+
+  <a-sky id="room-sky" color="#000000"></a-sky>
+
+  <a-entity id="scifi-room-entity">
+    <a-gltf-model id="room-floor" src="#room-model" position="0 0 0" rotation="0 0 0" scale="1 1 1"></a-gltf-model>
+
+    <!-- DESK -->
+    <a-entity id="desk-station" position="1.5 0.8 1.5">
+      <a-gltf-model src="#desk-model" position="0 0 0" rotation="0 90 0" scale="1 1 1"></a-gltf-model>
+      <a-entity id="desk-hint" position="0 0.9 0" visible="false">
+        <a-plane width="1.3" height="0.28" color="#000d18" opacity="0.92" position="0 0 -0.01" side="double"></a-plane>
+        <a-text value="[ E ]  USE COMPUTER" align="center" color="#00ffcc" scale="0.52 0.52 0.52"></a-text>
+      </a-entity>
+    </a-entity>
+
+    <a-gltf-model id="couch" src="#couch-model" position="-1.3 0.4 1.1" rotation="0 -90 0" scale="1.5 1.5 1.5"></a-gltf-model>
+
+    <!-- FLOOR LAMP -->
+    <a-entity id="lamp-station" position="-0.5 0 -2.5">
+      <a-gltf-model src="#lamp-model" position="0 0.3 0" rotation="0 45 0" scale="1 1 1"></a-gltf-model>
+      <a-light type="point" position="0 2.2 0" color="#ffe8aa" intensity="0.6" distance="5"></a-light>
+      <a-entity id="lamp-hint" position="0 2.8 0" visible="false">
+        <a-plane width="1.4" height="0.28" color="#0d0800" opacity="0.92" position="0 0 -0.01" side="double"></a-plane>
+        <a-text value="[ E ]  TREE PUZZLE" align="center" color="#ffe8aa" scale="0.52 0.52 0.52"></a-text>
+      </a-entity>
+    </a-entity>
+
+    <!-- DOOR -->
+    <a-entity id="door-station" position="1.9 1 -1.26">
+      <a-gltf-model src="#door-model" position="0 0 0" rotation="0 0 0" scale="1 1 1"></a-gltf-model>
+      <a-entity id="door-hint" position="0 1.2 0" visible="false">
+        <a-plane width="1.5" height="0.28" color="#0d0800" opacity="0.92" position="0 0 -0.01" side="double"></a-plane>
+        <a-text value="[ M ]  ENTER GARDEN" align="center" color="#88ff44" scale="0.52 0.52 0.52"></a-text>
+      </a-entity>
+    </a-entity>
+
+    <!-- COMPUTER TERMINAL -->
+    <a-entity id="computer-station" position="1.5 0 0">
+      <a-gltf-model id="computer-obj" src="#computer-model" position="0.3 0.8 0" rotation="0 90 0" scale="1.0 1.0 1.0"></a-gltf-model>
+    </a-entity>
+  </a-entity>
+
+  <!-- GARDEN -->
+  <a-entity id="garden-room-entity" visible="false">
+    <a-gltf-model id="garden-floor" src="#garden-model" position="0 0 0" rotation="0 0 0" scale="1 1 1"></a-gltf-model>
+
+    <!-- Tree puzzle zones — 3 spots, shown as glowing orbs so player can see them -->
+    <!-- Adjust x/z positions to match where actual trees appear in your garden.glb -->
+    <a-entity id="tree-zone-0" class="tree-zone" position="3 0 -2">
+      <a-sphere radius="0.25" color="#00ff99" opacity="0.55" animation="property:scale;from:1 1 1;to:1.35 1.35 1.35;loop:true;dur:900;dir:alternate;easing:easeInOutSine"></a-sphere>
+      <a-light type="point" color="#00ff99" intensity="0.6" distance="3"></a-light>
+      <a-entity id="tree-hint-0" position="0 1.5 0" visible="false">
+        <a-plane width="1.5" height="0.3" color="#001a0d" opacity="0.92" position="0 0 -0.01" side="double"></a-plane>
+        <a-text value="[ E ]  TREE PUZZLE 1" align="center" color="#00ff99" scale="0.55 0.55 0.55"></a-text>
+      </a-entity>
+    </a-entity>
+
+    <a-entity id="tree-zone-1" class="tree-zone" position="-3 0 -1">
+      <a-sphere radius="0.25" color="#aaff44" opacity="0.55" animation="property:scale;from:1 1 1;to:1.35 1.35 1.35;loop:true;dur:1100;dir:alternate;easing:easeInOutSine"></a-sphere>
+      <a-light type="point" color="#aaff44" intensity="0.6" distance="3"></a-light>
+      <a-entity id="tree-hint-1" position="0 1.5 0" visible="false">
+        <a-plane width="1.5" height="0.3" color="#0a1200" opacity="0.92" position="0 0 -0.01" side="double"></a-plane>
+        <a-text value="[ E ]  TREE PUZZLE 2" align="center" color="#aaff44" scale="0.55 0.55 0.55"></a-text>
+      </a-entity>
+    </a-entity>
+
+    <a-entity id="tree-zone-2" class="tree-zone" position="0 0 -5">
+      <a-sphere radius="0.25" color="#ffdd44" opacity="0.55" animation="property:scale;from:1 1 1;to:1.35 1.35 1.35;loop:true;dur:1300;dir:alternate;easing:easeInOutSine"></a-sphere>
+      <a-light type="point" color="#ffdd44" intensity="0.6" distance="3"></a-light>
+      <a-entity id="tree-hint-2" position="0 1.5 0" visible="false">
+        <a-plane width="1.5" height="0.3" color="#120f00" opacity="0.92" position="0 0 -0.01" side="double"></a-plane>
+        <a-text value="[ E ]  TREE PUZZLE 3" align="center" color="#ffdd44" scale="0.55 0.55 0.55"></a-text>
+      </a-entity>
+    </a-entity>
+  </a-entity>
+
+  <a-light type="ambient" color="#0a2030" intensity="1.5"></a-light>
+  <a-light id="main-light" type="point" position="0 4 0" color="#00ffcc" intensity="0.5" distance="15"></a-light>
+
+  <a-entity id="rig" position="0 0 0">
+    <a-camera look-controls wasd-controls="acceleration: 20" position="0 1.6 0">
+      <a-cursor fuse="false" color="#00ffcc" raycaster="objects: .clickable"></a-cursor>
+    </a-camera>
+  </a-entity>
+</a-scene>
+
+<script>
+/* ══════════════════════════════════════════════════════
+   PUZZLE BANKS
+══════════════════════════════════════════════════════ */
+
+// Lamp puzzle (inside sci-fi room, standalone)
+const LAMP_PUZZLE = {
+  tag: "TREE STRUCTURES", title: "Lowest Common Ancestor", difficulty: "MEDIUM",
+  description: "In the binary tree below, what is the Lowest Common Ancestor (LCA) of nodes 4 and 6?",
+  code: `         3\n        / \\\n       5   1\n      / \\ / \\\n     6  2 0  8\n       / \\\n      7   4`,
+  hint: "LCA is the deepest node that has both 4 and 6 as descendants.",
+  options: ["3", "5", "1", "2"], answer: 1,
+  explanation: "✓ Correct! Node 5 is the LCA of 4 and 6. Both are in 5's subtree.", points: 200
+};
+
+// ── 3 GARDEN TREE PUZZLES ─────────────────────────────────────────────────────
+const GARDEN_TREE_PUZZLES = [
+  {
+    tag: "TREE TRAVERSAL", title: "Preorder Traversal", difficulty: "MEDIUM",
+    description: "What is the preorder traversal (Root → Left → Right) of this binary tree?",
+    code: `        A\n       / \\\n      B   C\n     / \\   \\\n    D   E   F`,
+    hint: "Preorder = visit the root FIRST, then left subtree, then right.",
+    options: ["A B D E C F", "D B E A C F", "D E B F C A", "A C F B D E"],
+    answer: 0,
+    explanation: "✓ Correct! Preorder: A → B → D → E → C → F (Root first at each node).",
+    points: 200
+  },
+  {
+    tag: "TREE ALGORITHM", title: "BST Valid Check", difficulty: "MEDIUM",
+    description: "Which of these is a VALID Binary Search Tree? (left < root < right at every node)",
+    code: `  Option A:        Option B:\n     5                5\n    / \\              / \\\n   3   8            8   3\n  / \\              / \\\n 2   4            2   4`,
+    hint: "In a BST every node in the left subtree must be smaller than the root.",
+    options: ["Option A is valid BST", "Option B is valid BST", "Both are valid BSTs", "Neither is a valid BST"],
+    answer: 0,
+    explanation: "✓ Correct! Option A: 3 < 5, 8 > 5, 2 < 3, 4 > 3 — all BST rules satisfied. Option B violates root.",
+    points: 200
+  },
+  {
+    tag: "TREE CONCEPTS", title: "Tree Height vs Depth", difficulty: "EASY",
+    description: "In this tree, what is the HEIGHT of the tree and the DEPTH of node D?",
+    code: `         A        ← depth 0\n        / \\\n       B   C      ← depth 1\n      /\n     D             ← depth 2\n\nHeight = longest path root → leaf`,
+    hint: "Height = number of edges on the longest root-to-leaf path.",
+    options: ["Height=3, Depth=2", "Height=2, Depth=2", "Height=3, Depth=3", "Height=2, Depth=1"],
+    answer: 1,
+    explanation: "✓ Correct! Longest path A→B→D = 2 edges → Height=2. D is 2 edges from root → Depth=2.",
+    points: 200
+  }
+];
+
+// Indoor room puzzles
+const ROOMS = [
+  {
+    name: "BINARY TREES", skyColor: "#050f1a",
+    puzzles: [
+      { tag:"TREE STRUCTURES", title:"Height of Binary Tree", difficulty:"EASY", description:"Given a binary tree, find its maximum depth (height). The height of a tree is the number of edges on the longest path from root to leaf.", code:`     1\n    / \\\n   2   3\n  / \\\n 4   5`, hint:"Use recursion: height = 1 + max(height(left), height(right))", options:["2","3","4","5"], answer:0, explanation:"✓ Correct! Height = 2." }
+    ]
+  },
+  {
+    name: "LINKED LISTS", skyColor: "#120a00",
+    puzzles: [
+      { tag:"LINKED LIST", title:"Reverse a Linked List", difficulty:"MEDIUM", description:"After reversing the linked list 1→2→3→4→5, what is the new head node's value?", code:`Original: 1 → 2 → 3 → 4 → 5 → NULL\nReversed: ? → ? → ? → ? → ? → NULL`, hint:"The tail becomes the new head after reversal", options:["1","3","5","NULL"], answer:2, explanation:"✓ Correct! After reversal: 5→4→3→2→1→NULL. New head = 5" },
+      { tag:"CYCLE DETECTION", title:"Floyd's Cycle Detection", difficulty:"HARD", description:"In Floyd's cycle detection algorithm, how many pointers are used and at what speeds?", code:`slow = head\nfast = head\n\nwhile fast and fast.next:\n    slow = slow.next      // moves 1 step\n    fast = fast.next.next // moves ? steps`, hint:"Think: tortoise and hare", options:["2 pointers — slow:1 step, fast:2 steps","3 pointers — all different speeds","2 pointers — both move 1 step","1 pointer — visits every node"], answer:0, explanation:"✓ Correct! Floyd uses 2 pointers. Slow moves 1 step, Fast moves 2 steps. They meet if cycle exists." },
+      { tag:"LINKED LIST OPS", title:"Delete Middle Node", difficulty:"MEDIUM", description:"What is the result after deleting the middle node from: A→B→C→D→E?", code:`Input:  A → B → C → D → E\nMiddle node = C (index 2, 0-based)\nOutput: ?`, hint:"Find middle with slow/fast pointer, then skip it", options:["A→B→D→E","A→C→D→E","B→C→D→E","A→B→C→E"], answer:0, explanation:"✓ Correct! Middle is C. Removing C gives: A→B→D→E" }
+    ]
+  },
+  {
+    name: "STACKS & QUEUES", skyColor: "#0d0016",
+    puzzles: [
+      { tag:"STACK", title:"Valid Parentheses", difficulty:"EASY", description:"Using a stack, determine if the string is valid.", code:`Input: "({[]})"\n\nPush ( → stack: [( ]\nPush { → stack: [(, {]\nPush [ → stack: [(, {, []]\nPop  ] matches [ ✓\nPop  } matches { ✓\nPop  ) matches ( ✓`, hint:"Push opening, pop and check for closing brackets", options:["VALID ✓","INVALID ✗","Stack Overflow","Empty Stack"], answer:0, explanation:"✓ Correct! ({[]}) is valid — every bracket is properly nested and matched." },
+      { tag:"QUEUE", title:"Queue After Operations", difficulty:"EASY", description:"After these operations on an empty queue, what is the front element?", code:`enqueue(5)  → Queue: [5]\nenqueue(10) → Queue: [5, 10]\nenqueue(3)  → Queue: [5, 10, 3]\ndequeue()   → removes ?\ndequeue()   → removes ?\nfront()     → returns ?`, hint:"Queue is FIFO — First In, First Out", options:["3","5","10","Empty"], answer:0, explanation:"✓ Correct! FIFO: dequeue removes 5, then 10. Front is now 3." },
+      { tag:"STACK DESIGN", title:"Min Stack Complexity", difficulty:"HARD", description:"Design a stack that supports push, pop, and getMin() in O(1) time.", code:`Operations needed:\n  push(x)   → O(1)\n  pop()     → O(1)\n  getMin()  → O(1)  ← tricky!`, hint:"Use an auxiliary stack that tracks minimum at each state", options:["Scan all elements for min each time","Use 2 stacks — one main, one tracking min","Sort the stack on every push","Use a heap alongside the stack"], answer:1, explanation:"✓ Correct! Maintain a min-stack in parallel. getMin() = minStack.top() → O(1)" }
+    ]
+  },
+  {
+    name: "GRAPHS & BFS", skyColor: "#0f0e00",
+    puzzles: [
+      { tag:"GRAPH TRAVERSAL", title:"BFS Visit Order", difficulty:"EASY", description:"Starting from node 1, what is the BFS traversal order?", code:`Graph (undirected):\n  1 — 2\n  1 — 3\n  2 — 4\n  3 — 5\n  4 — 6\n\nAdjacency: 1:[2,3], 2:[1,4], 3:[1,5], 4:[2,6]`, hint:"BFS uses a queue — visit all neighbors before going deeper", options:["1, 2, 4, 6, 3, 5","1, 2, 3, 4, 5, 6","1, 3, 5, 2, 4, 6","1, 2, 3, 5, 4, 6"], answer:1, explanation:"✓ Correct! BFS from 1: visit 1, then [2,3], then [4,5], then [6] → 1,2,3,4,5,6" },
+      { tag:"GRAPH ALGORITHM", title:"Dijkstra's Shortest Path", difficulty:"HARD", description:"Find the shortest path distance from A to D.", code:`A --1-- B --2-- D\n|\n3\n|\nC -----2------ D\n\nEdges: A-B:1, A-C:3, B-D:2, C-D:2`, hint:"Try all paths: A→B→D vs A→C→D", options:["3","4","5","6"], answer:0, explanation:"✓ Correct! A→B→D = 1+2 = 3. A→C→D = 3+2 = 5. Shortest = 3" },
+      { tag:"GRAPH CONCEPTS", title:"DFS vs BFS Use Cases", difficulty:"MEDIUM", description:"Which algorithm is best suited to find the SHORTEST PATH in an unweighted graph?", code:`Unweighted graph — all edges cost 1\nGoal: minimum hops from S to T\n\nDFS: goes deep first\nBFS: explores level by level`, hint:"BFS explores nodes in order of distance from source", options:["DFS — it goes deeper faster","BFS — it finds shortest path by levels","Both are equally good","Neither — need Dijkstra's"], answer:1, explanation:"✓ Correct! BFS explores by levels. First time you reach T = shortest path." }
+    ]
+  }
+];
+
+/* ══════════════════════════════════════════════════════
+   GAME STATE
+══════════════════════════════════════════════════════ */
+let currentRoom        = 0;
+let currentPuzzleIndex = 0;
+let solvedInRoom       = 0;
+let totalSolved        = 0;   // unified counter across all puzzles (max 5)
+const TOTAL_PUZZLES    = 5;   // 2 indoor + 3 garden
+let totalScore         = 0;
+let puzzleActive       = false;
+const GAME_TIME = 120; // 2 minutes in seconds
+let gameTimeLeft  = GAME_TIME;
+let gameRunning   = false;
+let timerInterval = null;
+
+// Garden-specific state
+let inGarden           = false;
+let gardenSolvedCount  = 0;     // ← how many of the 3 tree puzzles solved
+const GARDEN_GOAL      = 3;     // ← escape when this hits 3
+const treeSolved       = [false, false, false];  // per-zone solved flag
+
+// Proximity flags
+let nearDesk     = false;
+let nearComputer = false;
+let nearDoor     = false;
+let nearLamp     = false;
+let nearTree     = [-1];  // index of tree zone player is near (-1 = none)
+
+// World positions
+const DESK_POS     = { x: 1.5,  z: 1.5   };
+const COMPUTER_POS = { x: 1.5,  z: 0     };
+const DOOR_POS     = { x: 1.9,  z: -1.26 };
+const LAMP_POS     = { x: -0.5, z: -2.5  };
+const TREE_ZONES   = [             // must match a-entity positions above
+  { x: 3,  z: -2 },
+  { x: -3, z: -1 },
+  { x: 0,  z: -5 }
+];
+const DESK_DIST    = 1.5;
+const DOOR_DIST    = 2.5;
+const LAMP_DIST    = 1.2;
+const TREE_DIST    = 1.8;
+
+let lampPuzzleSolved = false;
+
+/* ══════════════════════════════════════════════════════
+   KEYBOARD
+══════════════════════════════════════════════════════ */
+window.addEventListener('keydown', (e) => {
+  if (puzzleActive) return;
+
+  if (e.key === 'e' || e.key === 'E') {
+    // Indoor interactions
+    if (!inGarden) {
+      if (nearDesk || nearComputer)           { openPuzzle(currentPuzzleIndex); return; }
+      if (nearLamp && !lampPuzzleSolved)      { openGenericPuzzle(LAMP_PUZZLE, checkLampAnswer); return; }
+    }
+    // Garden tree interactions
+    const treeIdx = nearTree[0];
+    if (inGarden && treeIdx >= 0 && !treeSolved[treeIdx]) {
+      openTreePuzzle(treeIdx);
+      return;
+    }
+  }
+
+if ((e.key === 'm' || e.key === 'M') && nearDoor && !inGarden) {
+    const requiredPuzzles = ROOMS[currentRoom].puzzles.length;
+    if (solvedInRoom < requiredPuzzles) {
+      showToast(`⚠ Solve all ${requiredPuzzles} puzzles first! (${solvedInRoom}/${requiredPuzzles} done)`);
+      setTimeout(hideToast, 3000);
+      return;
+    }
+    enterGarden();
+  }
+});
+
+/* ══════════════════════════════════════════════════════
+   START
+══════════════════════════════════════════════════════ */
+function startGame() {
+  document.getElementById('intro').classList.add('fade-out');
+  const sceneEl = document.getElementById('scene');
+  sceneEl.style.display = '';
+  setTimeout(() => document.getElementById('intro').style.display = 'none', 800);
+  const doLoad = () => { loadRoom(0); startProximityLoop(); };
+  if (sceneEl.hasLoaded) doLoad();
+  else sceneEl.addEventListener('loaded', doLoad, { once: true });
+  // Start the timer
+  startTimer();
+}
+
+function loadRoom(idx) {
+  currentRoom = idx; currentPuzzleIndex = 0; solvedInRoom = 0;
+  const room = ROOMS[idx];
+  document.getElementById('room-sky').setAttribute('color', room.skyColor);
+  document.getElementById('room-name-badge').textContent    = `ROOM ${idx+1}: ${room.name}`;
+  document.getElementById('puzzle-count-badge').textContent = `PUZZLES: 0/${room.puzzles.length}`;
+}
+
+/* ════════════════════════════════════════════════
+   TIMER FUNCTIONS
+════════════════════════════════════════════════ */
+function startTimer() {
+  gameRunning = true;
+  gameTimeLeft = GAME_TIME;
+  updateTimerDisplay();
+  timerInterval = setInterval(() => {
+    gameTimeLeft--;
+    updateTimerDisplay();
+    
+    if (gameTimeLeft <= 0) {
+      endGameTimeout();
+    }
+  }, 1000);
+}
+
+function updateTimerDisplay() {
+  const mins = Math.floor(gameTimeLeft / 60);
+  const secs = gameTimeLeft % 60;
+  const display = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  const badge = document.getElementById('timer-badge');
+  if (badge) {
+    badge.textContent = `TIME: ${display}`;
+    // Warning color at 30 seconds
+    if (gameTimeLeft <= 30) badge.style.color = '#ff4444';
+    else badge.style.color = '#ffb3b3';
+  }
+}
+
+function stopTimer() {
+  gameRunning = false;
+  if (timerInterval) clearInterval(timerInterval);
+}
+
+function endGameTimeout() {
+  stopTimer();
+  puzzleActive = true; // Prevent further interaction
+  closePuzzle();
+  
+  document.getElementById('timeout-score').textContent = `SCORE BEFORE TIMEOUT: ${totalScore} PTS`;
+  const dne = document.getElementById('did-not-escape');
+  dne.style.display = 'flex';
+}
+
+/* ══════════════════════════════════════════════════════
+   PROXIMITY LOOP  (single setInterval — fixed)
+══════════════════════════════════════════════════════ */
+function getPlayerPos() {
+  const rig = document.getElementById('rig');
+  if (!rig || !rig.object3D) return null;
+  const cam = document.querySelector('a-camera');
+  if (cam && cam.object3D) {
+    const wp = new THREE.Vector3();
+    cam.object3D.getWorldPosition(wp);
+    return wp;
+  }
+  return rig.object3D.position;
+}
+
+function startProximityLoop() {
+  setInterval(() => {
+    if (puzzleActive) return;
+    const p = getPlayerPos();
+    if (!p) return;
+
+    if (inGarden) {
+      // ── Garden: check each tree zone ──────────────────
+      let foundTreeIdx = -1;
+      TREE_ZONES.forEach((tz, i) => {
+        const hint = document.getElementById(`tree-hint-${i}`);
+        if (treeSolved[i]) {
+          if (hint) hint.setAttribute('visible', false);
+          return;
+        }
+        const dist = Math.hypot(p.x - tz.x, p.z - tz.z);
+        if (dist < TREE_DIST) {
+          foundTreeIdx = i;
+          if (hint) hint.setAttribute('visible', true);
+        } else {
+          if (hint) hint.setAttribute('visible', false);
+        }
+      });
+
+      if (foundTreeIdx !== nearTree[0]) {
+        nearTree[0] = foundTreeIdx;
+        if (foundTreeIdx >= 0 && !treeSolved[foundTreeIdx]) {
+          showToast(`Near tree ${foundTreeIdx + 1} — Press [E] for Tree Puzzle ${foundTreeIdx + 1}`);
+        } else {
+          hideToast();
+        }
+      }
+      return; // skip indoor checks while in garden
+    }
+
+    // ── Indoor proximity checks ────────────────────────
+    const dDesk = Math.hypot(p.x - DESK_POS.x, p.z - DESK_POS.z);
+    const wasNearDesk = nearDesk;
+    nearDesk = dDesk < DESK_DIST;
+    const deskHint = document.getElementById('desk-hint');
+    if (deskHint) deskHint.setAttribute('visible', nearDesk);
+    if (nearDesk && !wasNearDesk) showToast('Near desk — Press [E] to use computer');
+    else if (!nearDesk && wasNearDesk) refreshToast();
+
+    const dLamp = Math.hypot(p.x - LAMP_POS.x, p.z - LAMP_POS.z);
+    const wasNearLamp = nearLamp;
+    nearLamp = dLamp < LAMP_DIST && !lampPuzzleSolved;
+    const lampHint = document.getElementById('lamp-hint');
+    if (lampHint) lampHint.setAttribute('visible', nearLamp);
+    if (nearLamp && !wasNearLamp) showToast('Near lamp — Press [E] for a Tree puzzle');
+    else if (!nearLamp && wasNearLamp) refreshToast();
+
+    const dDoor = Math.hypot(p.x - DOOR_POS.x, p.z - DOOR_POS.z);
+    const wasNearDoor = nearDoor;
+    nearDoor = dDoor < DOOR_DIST;
+    const doorHint = document.getElementById('door-hint');
+    if (doorHint) doorHint.setAttribute('visible', nearDoor);
+    if (nearDoor && !wasNearDoor) showToast('Near door — Press [M] to enter the Garden');
+    else if (!nearDoor && wasNearDoor) refreshToast();
+
+  }, 150);
+}
+
+function refreshToast() {
+  if (nearLamp)     { showToast('Near lamp — Press [E] for a puzzle'); return; }
+  if (nearDesk)     { showToast('Near desk — Press [E] to use computer'); return; }
+  if (nearDoor)     { showToast('Near door — Press [M] to enter the Garden'); return; }
+  if (inGarden && nearTree[0] >= 0) { showToast(`Near tree ${nearTree[0]+1} — Press [E] for Tree Puzzle`); return; }
+  hideToast();
+}
+
+/* ══════════════════════════════════════════════════════
+   TOASTS
+══════════════════════════════════════════════════════ */
+function showToast(msg) {
+  let t = document.getElementById('proximity-toast');
+  if (!t) {
+    t = document.createElement('div'); t.id = 'proximity-toast';
+    t.style.cssText = `position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#001a2e;border:1px solid #00ffcc88;color:#00ffcc;font-family:'Share Tech Mono',monospace;font-size:0.85rem;letter-spacing:2px;padding:12px 28px;border-radius:3px;z-index:150;pointer-events:none;`;
+    document.body.appendChild(t);
+  }
+  t.textContent = msg; t.style.display = 'block';
+}
+function hideToast() {
+  const t = document.getElementById('proximity-toast');
+  if (t) t.style.display = 'none';
+}
+
+/* ══════════════════════════════════════════════════════
+   ENTER GARDEN
+══════════════════════════════════════════════════════ */
+function enterGarden() {
+  if (inGarden) return;
+  inGarden = true;
+  gardenSolvedCount = 0;
+  nearTree[0] = -1;
+
+  const overlay = document.getElementById('room-transition');
+  document.getElementById('transition-text').textContent = 'ENTERING GARDEN...';
+  document.getElementById('transition-sub').textContent  = 'FIND THE 3 TREES TO ESCAPE';
+  overlay.classList.add('active');
+
+  setTimeout(() => {
+    document.getElementById('scifi-room-entity').setAttribute('visible', false);
+    document.getElementById('garden-room-entity').setAttribute('visible', true);
+    document.getElementById('room-sky').setAttribute('color', '#87ceeb');
+    document.getElementById('main-light').setAttribute('color', '#fffacd');
+    document.getElementById('main-light').setAttribute('intensity', '1.2');
+    document.querySelector('a-light[type="ambient"]').setAttribute('color', '#c8e6c9');
+    document.querySelector('a-light[type="ambient"]').setAttribute('intensity', '1.8');
+    document.getElementById('rig').setAttribute('position', '0 0 0');
+    document.querySelector('a-camera').setAttribute('position', '0 1.6 0');
+    document.getElementById('room-name-badge').textContent    = '🌿 GARDEN — Find the 3 Trees';
+    document.getElementById('puzzle-count-badge').textContent = `TREE PUZZLES: 0/${GARDEN_GOAL}`;
+
+    // Reset indoor hints
+    nearDesk = false; nearComputer = false; nearDoor = false; nearLamp = false;
+    ['desk-hint','door-hint','lamp-hint'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.setAttribute('visible', false);
+    });
+    hideToast();
+    overlay.classList.remove('active');
+    showToast('🌿 Explore the garden — find 3 glowing trees and press [E]');
+    setTimeout(hideToast, 4000);
+  }, 1400);
+}
+
+/* ══════════════════════════════════════════════════════
+   GARDEN TREE PUZZLES
+══════════════════════════════════════════════════════ */
+function openTreePuzzle(zoneIdx) {
+  const puzzle = GARDEN_TREE_PUZZLES[zoneIdx];
+  puzzleActive = true;
+  hideToast();
+
+  populateModal(puzzle, `tree_puzzle_${zoneIdx + 1}`);
+  // Wire up answer checker with zone index
+  document.querySelectorAll('.option-btn').forEach((btn, i) => {
+    btn.onclick = () => checkTreeAnswer(i, zoneIdx, btn);
+  });
+  document.getElementById('puzzle-modal').classList.add('open');
+  document.getElementById('screen-content').scrollTop = 0;
+}
+
+function checkTreeAnswer(chosen, zoneIdx, btnEl) {
+  if (!puzzleActive) return;
+  const puzzle = GARDEN_TREE_PUZZLES[zoneIdx];
+  document.querySelectorAll('.option-btn').forEach(b => b.style.pointerEvents = 'none');
+  const feedback = document.getElementById('puzzle-feedback');
+
+  if (chosen === puzzle.answer) {
+    btnEl.classList.add('correct');
+    feedback.className = 'success';
+    feedback.textContent = puzzle.explanation;
+    feedback.style.display = 'block';
+
+    totalScore += puzzle.points;
+    document.getElementById('score-badge').textContent = `SCORE: ${totalScore}`;
+    showScorePopup(`+${puzzle.points} PTS ✓`);
+
+    // Mark zone as solved, hide its orb/hint
+    treeSolved[zoneIdx] = true;
+    gardenSolvedCount++;
+
+    // Hide the glowing zone
+    const zone = document.getElementById(`tree-zone-${zoneIdx}`);
+    if (zone) zone.setAttribute('visible', false);
+
+    // Update counter
+    totalSolved++;
+    updateEscapeCounter();
+    document.getElementById('puzzle-count-badge').textContent = `TREE PUZZLES: ${gardenSolvedCount}/${GARDEN_GOAL}`;
+
+    puzzleActive = false;
+
+    setTimeout(() => {
+      const btn = document.getElementById('next-room-btn');
+      btn.textContent = 'CLOSE ✓';
+      btn.onclick = () => {
+        closePuzzle();
+        // Check escape condition AFTER modal closes
+        if (gardenSolvedCount >= GARDEN_GOAL) {
+          setTimeout(showEscapeVictory, 600);
+        }
+      };
+      btn.style.display = 'block';
+    }, 1000);
+
+  } else {
+    btnEl.classList.add('wrong');
+    feedback.className = 'fail';
+    feedback.textContent = '✗ Incorrect. Try again!';
+    feedback.style.display = 'block';
+    puzzleActive = false;
+
+    setTimeout(() => {
+      const btn = document.getElementById('next-room-btn');
+      btn.textContent = '↺  TRY AGAIN';
+      btn.onclick = () => { closePuzzle(); setTimeout(() => openTreePuzzle(zoneIdx), 200); };
+      btn.style.display = 'block';
+    }, 800);
+  }
+}
+
+/* Update the unified 5-pip progress bar at the bottom */
+function updateEscapeCounter() {
+  for (let i = 0; i < TOTAL_PUZZLES; i++) {
+    const pip = document.getElementById(`pip-${i}`);
+    if (pip) pip.classList.toggle('filled', i < totalSolved);
+  }
+  document.getElementById('counter-text').textContent = `${totalSolved} / ${TOTAL_PUZZLES}`;
+}
+
+/* ══════════════════════════════════════════════════════
+   VICTORY / ESCAPE
+══════════════════════════════════════════════════════ */
+function showEscapeVictory() {
+  document.getElementById('final-score').textContent = `FINAL SCORE: ${totalScore} PTS`;
+  document.getElementById('victory').classList.add('open');
+  stopTimer();
+}
+
+function goToLevels() {
+  document.body.style.transition = 'opacity .6s';
+  document.body.style.opacity = '0';
+  setTimeout(() => { window.location.href = '/level'; }, 650);
+}
+
+/* ══════════════════════════════════════════════════════
+   LAMP PUZZLE  (indoor, one-shot)
+══════════════════════════════════════════════════════ */
+function checkLampAnswer(chosen, btnEl) {
+  if (!puzzleActive) return;
+  const p = LAMP_PUZZLE;
+  document.querySelectorAll('.option-btn').forEach(b => b.style.pointerEvents = 'none');
+  const feedback = document.getElementById('puzzle-feedback');
+  if (chosen === p.answer) {
+    btnEl.classList.add('correct');
+    feedback.className = 'success'; feedback.textContent = p.explanation; feedback.style.display = 'block';
+    totalScore += p.points;
+    document.getElementById('score-badge').textContent = `SCORE: ${totalScore}`;
+    showScorePopup(`+${p.points} PTS ✓`);
+    lampPuzzleSolved = true;
+    const lampHint = document.getElementById('lamp-hint');
+    if (lampHint) lampHint.setAttribute('visible', false);
+    puzzleActive = false;
+    setTimeout(() => { const b = document.getElementById('next-room-btn'); b.textContent = 'CLOSE ✓'; b.onclick = closePuzzle; b.style.display = 'block'; }, 1000);
+  } else {
+btnEl.classList.add('wrong');
+    feedback.className = 'fail'; feedback.textContent = '✗ Incorrect. Try again!'; feedback.style.display = 'block';
+    puzzleActive = false;
+    setTimeout(() => {
+      const b = document.getElementById('next-room-btn');
+      b.textContent = '↺  TRY AGAIN';
+      b.onclick = () => { closePuzzle(); setTimeout(() => openGenericPuzzle(LAMP_PUZZLE, checkLampAnswer), 200); };
+      b.style.display = 'block';
+    }, 600);
+  }
+}
+
+/* ══════════════════════════════════════════════════════
+   INDOOR ROOM PUZZLES
+══════════════════════════════════════════════════════ */
+function openPuzzle(index) {
+  const room = ROOMS[currentRoom];
+  if (index >= room.puzzles.length) return;
+  const puzzle = room.puzzles[index];
+  currentPuzzleIndex = index; puzzleActive = true;
+  populateModal(puzzle, `puzzle_0${index+1}`);
+  document.querySelectorAll('.option-btn').forEach((btn, i) => {
+    btn.onclick = () => checkAnswer(i, puzzle, btn);
+  });
+  document.getElementById('puzzle-modal').classList.add('open');
+  hideToast();
+  document.getElementById('screen-content').scrollTop = 0;
+}
+
+function checkAnswer(chosen, puzzle, btnEl) {
+  if (!puzzleActive) return;
+  document.querySelectorAll('.option-btn').forEach(b => b.style.pointerEvents = 'none');
+  const feedback = document.getElementById('puzzle-feedback');
+  if (chosen === puzzle.answer) {
+    btnEl.classList.add('correct');
+    feedback.className = 'success'; feedback.textContent = puzzle.explanation; feedback.style.display = 'block';
+    const pts = { EASY:100, MEDIUM:200, HARD:300 }[puzzle.difficulty];
+    totalScore += pts;
+    document.getElementById('score-badge').textContent = `SCORE: ${totalScore}`;
+    showScorePopup(`+${pts} PTS ✓`);
+    solvedInRoom++; currentPuzzleIndex++; totalSolved++;
+    document.getElementById('puzzle-count-badge').textContent = `PUZZLES: ${solvedInRoom}/${ROOMS[currentRoom].puzzles.length}`;
+    updateEscapeCounter();
+    puzzleActive = false;
+    setTimeout(() => { const b = document.getElementById('next-room-btn'); b.textContent = 'CLOSE ✓'; b.onclick = closePuzzle; b.style.display = 'block'; }, 1000);
+} else {
+    btnEl.classList.add('wrong');
+    feedback.className = 'fail'; feedback.textContent = '✗ Incorrect. Try again!'; feedback.style.display = 'block';
+    puzzleActive = false;
+    setTimeout(() => {
+      const b = document.getElementById('next-room-btn');
+      b.textContent = '↺  TRY AGAIN';
+      b.onclick = () => { closePuzzle(); setTimeout(() => openPuzzle(currentPuzzleIndex), 200); };
+      b.style.display = 'block';
+    }, 600);
+  }
+}
+
+function goNextRoom() { closePuzzle(); if (currentRoom + 1 < ROOMS.length) loadRoom(currentRoom + 1); }
+
+/* ══════════════════════════════════════════════════════
+   GENERIC PUZZLE LAUNCHER (lamp puzzle)
+══════════════════════════════════════════════════════ */
+function openGenericPuzzle(puzzle, answerFn) {
+  puzzleActive = true;
+  populateModal(puzzle, 'lamp_puzzle');
+  document.querySelectorAll('.option-btn').forEach((btn, i) => {
+    btn.onclick = () => answerFn(i, btn);
+  });
+  document.getElementById('puzzle-modal').classList.add('open');
+  hideToast();
+  document.getElementById('screen-content').scrollTop = 0;
+}
+
+/* ══════════════════════════════════════════════════════
+   SHARED MODAL RENDERER
+══════════════════════════════════════════════════════ */
+function populateModal(puzzle, filename) {
+  document.getElementById('titlebar-filename').textContent  = filename;
+  document.getElementById('puzzle-tag').textContent         = puzzle.tag;
+  document.getElementById('puzzle-title').textContent       = puzzle.title;
+  const cls = { EASY:'diff-easy', MEDIUM:'diff-medium', HARD:'diff-hard' }[puzzle.difficulty];
+  document.getElementById('puzzle-difficulty').innerHTML    = `<span class="${cls}">◆ ${puzzle.difficulty}</span>`;
+  document.getElementById('puzzle-description').textContent = puzzle.description;
+  document.getElementById('puzzle-code-block').textContent  = puzzle.code;
+  document.getElementById('hint-text').style.display        = 'none';
+  document.getElementById('hint-text').textContent          = '💡 ' + puzzle.hint;
+  document.getElementById('puzzle-feedback').className      = '';
+  document.getElementById('puzzle-feedback').style.display  = 'none';
+  document.getElementById('next-room-btn').style.display    = 'none';
+  const grid = document.getElementById('options-grid');
+  grid.innerHTML = '';
+  puzzle.options.forEach((opt, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'option-btn';
+    btn.textContent = `${['A','B','C','D'][i]}.  ${opt}`;
+    grid.appendChild(btn); // onclick wired by caller
+  });
+}
+
+/* ══════════════════════════════════════════════════════
+   HELPERS
+══════════════════════════════════════════════════════ */
+function closePuzzle() {
+  document.getElementById('puzzle-modal').classList.remove('open');
+  puzzleActive = false;
+}
+function showHint() { document.getElementById('hint-text').style.display = 'block'; }
+function showScorePopup(msg) {
+  const p = document.getElementById('score-popup');
+  p.textContent = msg; p.style.display = 'block';
+  setTimeout(() => p.style.display = 'none', 2000);
+}
+</script>
+</body>
+</html>

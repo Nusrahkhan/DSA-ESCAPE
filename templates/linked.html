@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Linked List Escape Room</title>
+  <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap');
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Share Tech Mono', monospace; background: #000; overflow: hidden; }
+
+    /* ── HUD ── */
+    #hud { position: fixed; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; align-items: center; padding: 16px 28px; background: linear-gradient(180deg, rgba(0,0,0,0.88) 0%, transparent 100%); z-index: 100; pointer-events: none; }
+    #hud-title { font-family: 'Orbitron', monospace; font-size: 1.1rem; font-weight: 900; color: #ff6b6b; letter-spacing: 3px; text-shadow: 0 0 20px #ff6b6b88; }
+    #hud-right { display: flex; gap: 24px; align-items: center; }
+    .hud-badge { font-size: 0.75rem; color: #ffb3b3; letter-spacing: 2px; border: 1px solid #ff6b6b44; padding: 6px 14px; border-radius: 2px; background: rgba(255,107,107,0.06); transition: all 0.3s; }
+    #room-name-badge { font-family: 'Orbitron', monospace; color: #ff9f43; border-color: #ff9f4344; background: rgba(255,159,67,0.06); text-shadow: 0 0 10px #ff9f4366; }
+    #timer-badge { font-family: 'Orbitron', monospace; }
+
+    /* ── Puzzle Modal ── */
+    #puzzle-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.96); z-index: 200; justify-content: center; align-items: center; }
+    #puzzle-modal.open { display: flex; }
+    #monitor-assembly { display: flex; flex-direction: column; align-items: center; animation: monitorPowerOn 0.4s ease; }
+    @keyframes monitorPowerOn { 0% { opacity:0; transform:scale(0.94) translateY(20px); filter:brightness(3); } 60% { opacity:1; filter:brightness(1.3); } 100% { transform:scale(1) translateY(0); filter:brightness(1); } }
+    #monitor-bezel { background: linear-gradient(160deg, #2a1818 0%, #1c1010 40%, #120808 100%); border-radius: 12px 12px 4px 4px; padding: 18px 18px 22px; box-shadow: 0 0 0 1px #1a0808, 0 0 0 2px #2a1515, 4px 4px 20px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,150,150,0.08), inset 0 -2px 6px rgba(0,0,0,0.6); width: min(760px, 94vw); position: relative; }
+    #monitor-bezel::after { content: ''; position: absolute; bottom: 10px; right: 22px; width: 7px; height: 7px; border-radius: 50%; background: #ff4466; box-shadow: 0 0 6px #ff4466, 0 0 12px #ff446666; animation: ledBlink 3s ease-in-out infinite; }
+    @keyframes ledBlink { 0%,90%,100% { opacity:1; } 95% { opacity:0.3; } }
+    #monitor-brand { position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); font-family: 'Orbitron', monospace; font-size: 0.55rem; color: #442222; letter-spacing: 4px; }
+    #monitor-screen { background: #140000; border-radius: 4px; overflow: hidden; position: relative; border: 2px solid #2a0a0a; box-shadow: inset 0 0 60px rgba(30,0,0,0.9), inset 0 0 120px rgba(255,107,107,0.03), 0 0 30px rgba(255,107,107,0.08); }
+    #monitor-screen::before { content: ''; position: absolute; inset: 0; z-index: 100; pointer-events: none; background: repeating-linear-gradient(0deg, transparent 0px, transparent 2px, rgba(0,0,0,0.18) 2px, rgba(0,0,0,0.18) 3px); }
+    #monitor-screen::after { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 35%; z-index: 101; pointer-events: none; background: linear-gradient(180deg, rgba(255,100,100,0.04) 0%, rgba(255,255,255,0.01) 50%, transparent 100%); border-radius: 4px 4px 0 0; }
+    #screen-titlebar { background: linear-gradient(90deg, #1e0808 0%, #280d0d 50%, #1e0808 100%); border-bottom: 1px solid #ff6b6b22; padding: 0; display: flex; align-items: stretch; height: 36px; position: relative; z-index: 10; }
+    #titlebar-dots { display: flex; align-items: center; gap: 7px; padding: 0 14px; border-right: 1px solid #ff6b6b11; }
+    .tb-dot { width: 12px; height: 12px; border-radius: 50%; cursor: pointer; transition: filter 0.15s; }
+    .tb-dot:hover { filter: brightness(1.3); }
+    .tb-dot.red    { background: radial-gradient(circle at 35% 35%, #ff7070, #cc3333); box-shadow: 0 0 4px #cc333366; }
+    .tb-dot.yellow { background: radial-gradient(circle at 35% 35%, #ffdd70, #ccaa00); box-shadow: 0 0 4px #ccaa0066; }
+    .tb-dot.green  { background: radial-gradient(circle at 35% 35%, #70ff99, #00aa44); box-shadow: 0 0 4px #00aa4466; }
+    #titlebar-name { flex:1; display:flex; align-items:center; justify-content:center; font-size:0.65rem; color:#6a3a3a; letter-spacing:2px; }
+    #titlebar-name span { color: #cc5555; }
+    #titlebar-right { display:flex; align-items:center; padding:0 12px; gap:10px; border-left:1px solid #ff6b6b11; font-size:0.6rem; color:#4a2020; }
+    #screen-content { padding: 20px 24px 24px; max-height: calc(80vh - 36px); overflow-y: auto; position: relative; z-index: 10; color: #ffe0e0; }
+    #screen-content::-webkit-scrollbar { width: 6px; }
+    #screen-content::-webkit-scrollbar-track { background: #0e0000; }
+    #screen-content::-webkit-scrollbar-thumb { background: #ff6b6b33; border-radius: 3px; }
+    .puzzle-tag { font-size:0.6rem; letter-spacing:4px; color:#ff6b6b88; margin-bottom:10px; display:flex; align-items:center; gap:6px; }
+    .puzzle-tag::before { content:'▸▸'; color:#ff6b6b44; }
+    #puzzle-title { font-family:'Orbitron',monospace; font-size:1.2rem; font-weight:700; color:#fff0f0; margin-bottom:6px; line-height:1.3; text-shadow:0 0 20px rgba(255,100,100,0.2); }
+    #puzzle-difficulty { font-size:0.68rem; letter-spacing:2px; margin-bottom:18px; }
+    .diff-easy   { color:#00ff99; text-shadow:0 0 8px #00ff9944; }
+    .diff-medium { color:#ffaa00; text-shadow:0 0 8px #ffaa0044; }
+    .diff-hard   { color:#ff4466; text-shadow:0 0 8px #ff446644; }
+    .screen-divider { border:none; border-top:1px solid #ff6b6b18; margin:0 0 16px 0; }
+    #puzzle-description { color:#c87a7a; font-size:0.84rem; line-height:1.75; margin-bottom:16px; padding:10px 12px; background:rgba(255,107,107,0.025); border-left:2px solid #ff6b6b33; border-radius:0 3px 3px 0; }
+    #puzzle-code-block { background:#0a0000; border:1px solid #1a0808; border-top:2px solid #ff6b6b22; border-radius:3px; padding:14px 16px; margin-bottom:16px; font-size:0.8rem; color:#ff9999; white-space:pre; overflow-x:auto; line-height:1.65; position:relative; }
+    #puzzle-code-block::before { content:'CODE'; position:absolute; top:-9px; left:10px; background:#0a0000; padding:0 6px; font-size:0.52rem; color:#ff6b6b44; letter-spacing:3px; }
+    #hint-btn { background:none; border:1px solid #ffcc0022; color:#ffcc0044; font-family:'Share Tech Mono',monospace; font-size:0.68rem; letter-spacing:2px; padding:6px 14px; cursor:pointer; border-radius:2px; margin-bottom:14px; transition:all 0.2s; display:block; }
+    #hint-btn:hover { border-color:#ffcc00aa; color:#ffcc00; background:rgba(255,204,0,0.05); }
+    #hint-text { display:none; color:#ffcc0077; font-size:0.76rem; margin-bottom:14px; padding:8px 12px; background:rgba(255,204,0,0.04); border-left:2px solid #ffcc0033; border-radius:0 3px 3px 0; }
+    .options-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:16px; }
+    .option-btn { background:rgba(20,0,0,0.8); border:1px solid #2a0d0d; color:#c87a7a; font-family:'Share Tech Mono',monospace; font-size:0.79rem; padding:12px 14px; border-radius:3px; cursor:pointer; text-align:left; transition:all 0.18s; position:relative; overflow:hidden; }
+    .option-btn::before { content:''; position:absolute; left:0; top:0; bottom:0; width:2px; background:#ff6b6b; opacity:0; transition:opacity 0.15s; }
+    .option-btn:hover { border-color:#ff6b6b44; color:#ffcccc; background:rgba(255,107,107,0.05); }
+    .option-btn:hover::before { opacity:1; }
+    .option-btn.correct { background:rgba(0,40,25,0.9); border-color:#00ff9966; color:#00ff99; box-shadow:0 0 12px rgba(0,255,150,0.1); }
+    .option-btn.correct::before { opacity:1; background:#00ff99; }
+    .option-btn.wrong { background:rgba(40,0,10,0.9); border-color:#ff446655; color:#ff7799; }
+    #puzzle-feedback { font-size:0.8rem; margin-bottom:14px; padding:11px 14px; border-radius:3px; display:none; line-height:1.55; }
+    #puzzle-feedback.success { background:rgba(0,30,18,0.9); border:1px solid #00ff9933; border-left:3px solid #00ff99; color:#88ffcc; display:block; }
+    #puzzle-feedback.fail    { background:rgba(30,0,12,0.9); border:1px solid #ff446633; border-left:3px solid #ff4466; color:#ff9ab0; display:block; }
+    #next-puzzle-btn { display:none; background:transparent; border:1px solid #ff6b6b66; color:#ff6b6b; font-family:'Share Tech Mono',monospace; font-size:0.75rem; letter-spacing:3px; padding:11px 26px; cursor:pointer; border-radius:2px; margin-top:4px; transition:all 0.2s; }
+    #next-puzzle-btn:hover { background:rgba(255,107,107,0.08); border-color:#ff6b6b; color:#fff; box-shadow:0 0 16px rgba(255,107,107,0.2); }
+    #monitor-neck { width:50px; height:16px; background:linear-gradient(90deg,#1a0a0a,#2a1515,#1a0a0a); clip-path:polygon(20% 0%,80% 0%,90% 100%,10% 100%); }
+    #monitor-base { width:180px; height:10px; background:linear-gradient(180deg,#221212,#1a0a0a); border-radius:0 0 8px 8px; box-shadow:0 4px 12px rgba(0,0,0,0.6); }
+
+    /* ── Room Transition ── */
+    #room-transition { display:none; position:fixed; inset:0; z-index:300; background:#000; justify-content:center; align-items:center; flex-direction:column; gap:16px; }
+    #room-transition.active { display:flex; animation:fadeInOut 2.2s forwards; }
+    @keyframes fadeInOut { 0%{opacity:0;} 25%{opacity:1;} 75%{opacity:1;} 100%{opacity:0;pointer-events:none;} }
+    #transition-text { font-family:'Orbitron',monospace; font-size:1.4rem; font-weight:700; color:#ff6b6b; letter-spacing:4px; text-align:center; text-shadow:0 0 30px #ff6b6b; }
+    #transition-sub { color:#664444; font-size:0.75rem; letter-spacing:3px; }
+
+    /* ── Crosshair ── */
+    #crosshair { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); width:20px; height:20px; pointer-events:none; z-index:50; }
+    #crosshair::before, #crosshair::after { content:''; position:absolute; background:rgba(255,150,150,0.7); border-radius:1px; }
+    #crosshair::before { width:2px; height:100%; left:50%; transform:translateX(-50%); }
+    #crosshair::after  { width:100%; height:2px; top:50%; transform:translateY(-50%); }
+
+    /* ── Intro ── */
+    #intro { position:fixed; inset:0; background:#000; z-index:999; display:flex; flex-direction:column; justify-content:center; align-items:center; gap:24px; }
+    #intro.fade-out { animation:fadeOut 0.8s forwards; }
+    @keyframes fadeOut { to { opacity:0; pointer-events:none; } }
+    .intro-title { font-family:'Orbitron',monospace; font-size:clamp(2rem,6vw,3.8rem); font-weight:900; color:#ff6b6b; text-align:center; text-shadow:0 0 40px #ff6b6b99; letter-spacing:4px; line-height:1.2; }
+    .intro-subtitle { color:#ff6b6b; font-family:'Orbitron',monospace; font-size:clamp(0.9rem,2.5vw,1.2rem); letter-spacing:6px; text-align:center; opacity:0.6; }
+    .intro-sub { color:#664444; font-size:0.85rem; letter-spacing:3px; text-align:center; max-width:440px; line-height:1.7; }
+    .intro-chain { display:flex; align-items:center; gap:0; flex-wrap:wrap; justify-content:center; margin:8px 0; }
+    .chain-node { border:1px solid #ff6b6b55; padding:8px 18px; color:#ff9999; font-size:0.75rem; letter-spacing:2px; border-radius:2px; background:#1a0505; }
+    .chain-arrow { color:#ff6b6b44; font-size:1.2rem; padding:0 6px; }
+    #start-btn { background:transparent; border:2px solid #ff6b6b; color:#ff6b6b; font-family:'Orbitron',monospace; font-weight:700; font-size:0.9rem; letter-spacing:4px; padding:16px 48px; cursor:pointer; border-radius:2px; transition:all 0.3s; margin-top:10px; }
+    #start-btn:hover { background:#ff6b6b; color:#000; box-shadow:0 0 40px #ff6b6b88; }
+
+    /* ── Score popup ── */
+    #score-popup { position:fixed; top:80px; right:28px; z-index:150; display:none; background:#220000; border:1px solid #ff6b6b66; color:#ff9999; font-size:0.8rem; padding:10px 20px; border-radius:3px; letter-spacing:1px; animation:popIn 0.3s ease; }
+    @keyframes popIn { from{transform:scale(0.8) translateY(-10px);opacity:0;} to{transform:scale(1);opacity:1;} }
+
+    /* ── Progress counter ── */
+    #escape-counter { position:fixed; bottom:28px; left:50%; transform:translateX(-50%); z-index:150; display:flex; align-items:center; gap:10px; background:rgba(20,0,0,0.88); border:1px solid #ff6b6b33; padding:10px 24px; border-radius:4px; pointer-events:none; }
+    .counter-label { font-size:0.65rem; letter-spacing:3px; color:#664444; }
+    .counter-pips { display:flex; gap:8px; }
+    .pip { width:14px; height:14px; border-radius:50%; border:1.5px solid #ff6b6b44; background:transparent; transition:all 0.4s; }
+    .pip.filled { background:#ff6b6b; border-color:#ff6b6b; box-shadow:0 0 10px #ff6b6b; }
+
+    /* ── Link nodes decorative ── */
+    .link-chain-decor { display:flex; align-items:center; gap:0; margin:10px 0; opacity:0.4; }
+    .lc-node { width:24px; height:24px; border:1px solid #ff6b6b; border-radius:3px; display:inline-flex; align-items:center; justify-content:center; font-size:0.55rem; color:#ff6b6b; }
+    .lc-arrow { font-size:0.9rem; color:#ff6b6b; padding:0 2px; }
+
+    /* ── Victory ── */
+    #victory { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.96); z-index:500; flex-direction:column; justify-content:center; align-items:center; gap:20px; }
+    #victory.open { display:flex; }
+    .victory-title { font-family:'Orbitron',monospace; font-size:3rem; font-weight:900; color:#ff6b6b; text-shadow:0 0 60px #ff6b6b; animation:pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{text-shadow:0 0 60px #ff6b6b;} 50%{text-shadow:0 0 100px #ff6b6b,0 0 120px #ffaa00;} }
+    .victory-sub { color:#ffb3b3; font-size:1rem; letter-spacing:2px; text-align:center; }
+    .victory-score { color:#ffcc00; font-size:1.3rem; margin-top:10px; }
+    .victory-chain { display:flex; align-items:center; margin:10px 0; }
+    .v-node { width:36px; height:36px; border:2px solid #ff6b6b; border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:0.7rem; color:#ff6b6b; background:#1a0505; animation:nodeGlow 1.5s ease-in-out infinite alternate; }
+    .v-node:nth-child(3) { animation-delay:0.2s; }
+    .v-node:nth-child(5) { animation-delay:0.4s; }
+    .v-node:nth-child(7) { animation-delay:0.6s; }
+    @keyframes nodeGlow { from{box-shadow:0 0 4px #ff6b6b;border-color:#ff6b6b55;} to{box-shadow:0 0 16px #ff6b6b;border-color:#ff6b6b;} }
+    .v-arrow { font-size:1.2rem; color:#ff6b6b66; padding:0 4px; }
+    .victory-btns { display:flex; gap:16px; margin-top:20px; }
+    .victory-btn { background:none; border:2px solid #ff6b6b; color:#ff6b6b; font-family:'Orbitron',monospace; font-size:0.8rem; letter-spacing:3px; padding:14px 32px; cursor:pointer; border-radius:2px; transition:all 0.3s; }
+    .victory-btn:hover { background:#ff6b6b; color:#000; box-shadow:0 0 30px #ff6b6b88; }
+    .victory-btn.secondary { border-color:#ffcc00; color:#ffcc00; }
+    .victory-btn.secondary:hover { background:#ffcc00; color:#000; box-shadow:0 0 30px #ffcc0088; }
+
+    /* ── Did Not Escape ── */
+    #did-not-escape { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.96); z-index:500; flex-direction:column; justify-content:center; align-items:center; gap:20px; }
+    #did-not-escape.open { display:flex; }
+    .escape-fail-title { font-family:'Orbitron',monospace; font-size:2.8rem; font-weight:900; color:#ff4444; text-shadow:0 0 40px #ff4444; animation:pulse-red 1s infinite; }
+    @keyframes pulse-red { 0%,100%{text-shadow:0 0 40px #ff4444;} 50%{text-shadow:0 0 60px #ff4444,0 0 80px #ff0000;} }
+    .escape-fail-sub { color:#ff6b6b; font-size:1.2rem; letter-spacing:3px; }
+    .escape-fail-msg { color:#9a5555; font-size:0.9rem; text-align:center; max-width:500px; }
+    .escape-fail-score { color:#ffaa00; font-size:1.1rem; margin-top:10px; }
+    .escape-fail-btns { display:flex; gap:16px; margin-top:20px; }
+    .escape-fail-btn { background:none; border:2px solid #ff4444; color:#ff4444; font-family:'Orbitron',monospace; font-size:0.8rem; letter-spacing:3px; padding:14px 32px; cursor:pointer; border-radius:2px; transition:all 0.3s; }
+    .escape-fail-btn:hover { background:#ff4444; color:#000; box-shadow:0 0 30px #ff444488; }
+    .escape-fail-btn.secondary { border-color:#ffaa00; color:#ffaa00; }
+    .escape-fail-btn.secondary:hover { background:#ffaa00; color:#000; box-shadow:0 0 30px #ffaa0088; }
+
+    a-scene { cursor: pointer; }
+  </style>
+</head>
+<body>
+
+<!-- ── Intro Screen ── -->
+<div id="intro">
+  <div class="intro-title">🔗 LINKED LIST<br>ESCAPE ROOM</div>
+  <div class="intro-subtitle">CHAIN YOUR WAY TO FREEDOM</div>
+  <div class="intro-sub">Navigate a chain of nodes and solve linked list challenges to escape the dungeon.</div>
+  <div class="intro-chain">
+    <div class="chain-node">HEAD</div>
+    <div class="chain-arrow">→</div>
+    <div class="chain-node">NODE 1</div>
+    <div class="chain-arrow">→</div>
+    <div class="chain-node">NODE 2</div>
+    <div class="chain-arrow">→</div>
+    <div class="chain-node">NULL</div>
+  </div>
+  <button id="start-btn" onclick="startGame()">ENTER THE CHAIN</button>
+</div>
+
+<div id="crosshair"></div>
+
+<!-- ── HUD ── -->
+<div id="hud">
+  <div id="hud-title">🔗 LINKED LIST ESCAPE</div>
+  <div id="hud-right">
+    <div class="hud-badge" id="timer-badge">TIME: 2:00</div>
+    <div class="hud-badge" id="room-name-badge">LINKED DUNGEON</div>
+    <div class="hud-badge" id="score-badge">SCORE: 0</div>
+    <div class="hud-badge" id="puzzle-count-badge">NODES: 0/3</div>
+  </div>
+</div>
+
+<!-- ── Progress counter ── -->
+<div id="escape-counter">
+  <span class="counter-label">CHAIN LINKS SOLVED</span>
+  <div class="counter-pips">
+    <div class="pip" id="pip-0"></div>
+    <div class="pip" id="pip-1"></div>
+    <div class="pip" id="pip-2"></div>
+  </div>
+  <span class="counter-label" id="counter-text">0 / 3</span>
+</div>
+
+<div id="score-popup">+200 PTS ✓</div>
+
+<!-- ── Room transition ── -->
+<div id="room-transition">
+  <div id="transition-text">ENTERING THE CHAIN...</div>
+  <div id="transition-sub">INITIALIZING NODE CONNECTIONS</div>
+</div>
+
+<!-- ── Puzzle Modal ── -->
+<div id="puzzle-modal">
+  <div id="monitor-assembly">
+    <div id="monitor-bezel">
+      <span id="monitor-brand">LINKED·SYS</span>
+      <div id="monitor-screen">
+        <div id="screen-titlebar">
+          <div id="titlebar-dots">
+            <div class="tb-dot red" onclick="closePuzzle()"></div>
+            <div class="tb-dot yellow"></div>
+            <div class="tb-dot green"></div>
+          </div>
+          <div id="titlebar-name">
+            <span id="titlebar-filename">linked_terminal</span>.exe — node_puzzle
+          </div>
+          <div id="titlebar-right"><span>●●●</span></div>
+        </div>
+        <div id="screen-content">
+          <div class="puzzle-tag" id="puzzle-tag">LINKED LIST</div>
+          <div id="puzzle-title">Loading...</div>
+          <div id="puzzle-difficulty"></div>
+          <hr class="screen-divider">
+          <div id="puzzle-description"></div>
+          <pre id="puzzle-code-block"></pre>
+          <button id="hint-btn" onclick="showHint()">💡 SHOW HINT</button>
+          <div id="hint-text"></div>
+          <div class="options-grid" id="options-grid"></div>
+          <div id="puzzle-feedback"></div>
+          <button id="next-puzzle-btn" onclick="handleNextBtn()">CONTINUE →</button>
+        </div>
+      </div>
+    </div>
+    <div id="monitor-neck"></div>
+    <div id="monitor-base"></div>
+  </div>
+</div>
+
+<!-- ── Victory ── -->
+<div id="victory">
+  <div class="victory-title">🔗 ESCAPED!</div>
+  <div class="victory-chain">
+    <div class="v-node">✓</div><div class="v-arrow">→</div>
+    <div class="v-node">✓</div><div class="v-arrow">→</div>
+    <div class="v-node">✓</div><div class="v-arrow">→</div>
+    <div class="v-node">NULL</div>
+  </div>
+  <div class="victory-sub">ALL CHAIN LINKS SOLVED<br>YOU TRAVERSED THE LINKED LIST DUNGEON</div>
+  <div class="victory-score" id="final-score"></div>
+  <div class="victory-btns">
+    <button class="victory-btn" onclick="location.reload()">PLAY AGAIN</button>
+    <button class="victory-btn secondary" onclick="goToLevels()">← LEVEL SELECT</button>
+  </div>
+</div>
+
+<!-- ── Did Not Escape ── -->
+<div id="did-not-escape">
+  <div class="escape-fail-title">⏰ TIME'S UP</div>
+  <div class="escape-fail-sub">YOU DID NOT ESCAPE</div>
+  <div class="escape-fail-msg">The dungeon locked down before you could solve all the puzzles.</div>
+  <div class="escape-fail-score" id="timeout-score"></div>
+  <div class="escape-fail-btns">
+    <button class="escape-fail-btn" onclick="location.reload()">TRY AGAIN</button>
+    <button class="escape-fail-btn secondary" onclick="goToLevels()">← LEVEL SELECT</button>
+  </div>
+</div>
+
+<!-- ── A-Frame Scene ── -->
+<a-scene id="scene" style="display:none" vr-mode-ui="enabled: false" renderer="antialias: true">
+  <a-assets timeout="30000">
+    <a-asset-item id="linked-model" src="/static/linked.glb"></a-asset-item>
+  </a-assets>
+
+  <a-sky id="room-sky" color="#0a0000"></a-sky>
+
+  <a-entity id="linked-room-entity">
+    <!-- Main room model -->
+    <a-gltf-model id="room-floor" src="#linked-model" position="0 0 0" rotation="0 0 0" scale="1 1 1"></a-gltf-model>
+
+    <!-- ── Puzzle Zone 0: Node Alpha (left side) — unchanged ── -->
+    <a-entity id="node-zone-0" class="node-zone" position="-3 0 -1">
+      <a-box width="0.4" height="0.4" depth="0.4" color="#ff6b6b" opacity="0.7"
+        animation="property:rotation;from:0 0 0;to:0 360 0;loop:true;dur:4000;easing:linear"
+        animation__pulse="property:scale;from:1 1 1;to:1.3 1.3 1.3;loop:true;dur:800;dir:alternate;easing:easeInOutSine">
+      </a-box>
+      <a-light type="point" color="#ff4444" intensity="0.8" distance="4"></a-light>
+      <a-entity id="node-hint-0" position="0 1.8 0" visible="false">
+        <a-plane width="1.6" height="0.32" color="#1a0000" opacity="0.92" position="0 0 -0.01" side="double"></a-plane>
+        <a-text value="[ E ]  NODE PUZZLE 1" align="center" color="#ff6b6b" scale="0.56 0.56 0.56"></a-text>
+      </a-entity>
+      <a-text value="→" position="0.6 0.2 0" color="#ff6b6b44" scale="1.5 1.5 1.5" align="center"></a-text>
+    </a-entity>
+
+    <!-- ── Puzzle Zone 1: Node Beta — moved to X=3.89, Y=0, Z=4.57 ── -->
+    <a-entity id="node-zone-1" class="node-zone" position="3.89 0 4.57">
+      <a-box width="0.4" height="0.4" depth="0.4" color="#ff9f43" opacity="0.7"
+        animation="property:rotation;from:0 0 0;to:0 360 0;loop:true;dur:3000;easing:linear"
+        animation__pulse="property:scale;from:1 1 1;to:1.3 1.3 1.3;loop:true;dur:1000;dir:alternate;easing:easeInOutSine">
+      </a-box>
+      <a-light type="point" color="#ff9933" intensity="0.8" distance="4"></a-light>
+      <a-entity id="node-hint-1" position="0 1.8 0" visible="false">
+        <a-plane width="1.6" height="0.32" color="#1a0800" opacity="0.92" position="0 0 -0.01" side="double"></a-plane>
+        <a-text value="[ E ]  NODE PUZZLE 2" align="center" color="#ff9f43" scale="0.56 0.56 0.56"></a-text>
+      </a-entity>
+      <a-text value="→" position="0.6 0.2 0" color="#ff9f4344" scale="1.5 1.5 1.5" align="center"></a-text>
+    </a-entity>
+
+    <!-- ── Puzzle Zone 2: Node Gamma — moved to X=-8.10, Y=0, Z=6.94 ── -->
+    <a-entity id="node-zone-2" class="node-zone" position="-8.10 0 6.94">
+      <a-box width="0.4" height="0.4" depth="0.4" color="#ffd32a" opacity="0.7"
+        animation="property:rotation;from:0 0 0;to:0 360 0;loop:true;dur:2500;easing:linear"
+        animation__pulse="property:scale;from:1 1 1;to:1.3 1.3 1.3;loop:true;dur:600;dir:alternate;easing:easeInOutSine">
+      </a-box>
+      <a-light type="point" color="#ffdd00" intensity="0.8" distance="4"></a-light>
+      <a-entity id="node-hint-2" position="0 1.8 0" visible="false">
+        <a-plane width="1.8" height="0.32" color="#1a1000" opacity="0.92" position="0 0 -0.01" side="double"></a-plane>
+        <a-text value="[ E ]  NODE PUZZLE 3" align="center" color="#ffd32a" scale="0.52 0.52 0.52"></a-text>
+      </a-entity>
+    </a-entity>
+
+    <!-- Floating NULL terminus decoration -->
+    <a-entity position="0 1.2 -8">
+      <a-text value="→ NULL" align="center" color="#ff6b6b22" scale="2 2 2"></a-text>
+    </a-entity>
+  </a-entity>
+
+  <!-- Lighting -->
+  <a-light type="ambient" color="#4a1515" intensity="1.6"></a-light>
+  <a-light id="main-light" type="point" position="0 4 0" color="#ff4444" intensity="0.4" distance="20"></a-light>
+  <a-light type="point" position="-3 3 -1"   color="#ff6b6b" intensity="0.3" distance="8"></a-light>
+  <!-- Puzzle 2 light updated to match new position -->
+  <a-light type="point" position="3.89 3 4.57"  color="#ff9f43" intensity="0.3" distance="8"></a-light>
+  <!-- Puzzle 3 light updated to match new position -->
+  <a-light type="point" position="-8.10 3 6.94" color="#ffd32a" intensity="0.3" distance="8"></a-light>
+
+  <a-entity id="rig" position="0 0 0">
+    <a-camera look-controls wasd-controls="acceleration: 20" position="0 1.6 0">
+      <a-cursor fuse="false" color="#ff6b6b" raycaster="objects: .clickable"></a-cursor>
+    </a-camera>
+  </a-entity>
+</a-scene>
+
+<script>
+/* ════════════════════════════════════════════════
+   LINKED LIST PUZZLE BANK — 3 puzzles
+════════════════════════════════════════════════ */
+const LINKED_PUZZLES = [
+  {
+    tag: "LINKED LIST",
+    title: "Reverse a Linked List",
+    difficulty: "MEDIUM",
+    description: "You are given a singly linked list: 1 → 2 → 3 → 4 → 5 → NULL.\nAfter reversing it completely, what is the output printed when traversing from the new HEAD?",
+    code:
+`Original:  HEAD → [1] → [2] → [3] → [4] → [5] → NULL
+
+reverseList(head):
+  prev = NULL
+  curr = head
+  while curr:
+    next_node = curr.next
+    curr.next = prev
+    prev = curr
+    curr = next_node
+  return prev   ← this becomes new HEAD
+
+Reversed:  HEAD → [?] → [?] → [?] → [?] → [?] → NULL`,
+    hint: "The tail (5) becomes the new HEAD after reversal. Traverse in reverse order.",
+    options: [
+      "5 → 4 → 3 → 2 → 1 → NULL",
+      "1 → 2 → 3 → 4 → 5 → NULL",
+      "1 → 3 → 5 → NULL",
+      "5 → 3 → 1 → NULL"
+    ],
+    answer: 0,
+    explanation: "✓ Correct! After reversing, prev points to old tail (5). Traversal: 5 → 4 → 3 → 2 → 1 → NULL.",
+    points: 200
+  },
+  {
+    tag: "CIRCULAR LINKED LIST",
+    title: "Last Node Points to Head — What Happens?",
+    difficulty: "EASY",
+    description: "Consider the following code. What does this operation do to the linked list?",
+    code:
+`Node* temp = head;
+while(temp->next != NULL)
+    temp = temp->next;
+temp->next = head;`,
+    hint: "Focus on what happens when the last node points back to the first node.",
+    options: [
+      "Deletes last node",
+      "Creates circular linked list",
+      "Reverses linked list",
+      "Finds middle node"
+    ],
+    answer: 1,
+    explanation: "✓ Correct! The last node's next pointer is set to head, forming a loop. This converts the singly linked list into a circular linked list.",
+    points: 200
+  },
+  {
+    tag: "LINKED LIST OPS",
+    title: "Find Middle Node",
+    difficulty: "MEDIUM",
+    description: "Using the slow/fast pointer technique, what node does 'slow' point to when 'fast' reaches NULL (or has no next), for a list of length 7?\n\n1 → 2 → 3 → 4 → 5 → 6 → 7 → NULL",
+    code:
+`slow = head   // starts at [1]
+fast = head   // starts at [1]
+
+while fast and fast.next:
+    slow = slow.next       // +1 step
+    fast = fast.next.next  // +2 steps
+
+# When fast can't move further...
+# slow is at the MIDDLE node
+
+List:  [1] → [2] → [3] → [4] → [5] → [6] → [7] → NULL
+        ↑
+       HEAD`,
+    hint: "Fast moves 2× speed. When fast hits end, slow is at the midpoint. 7 nodes → middle is node at index 3 (0-based index 3 = value 4).",
+    options: [
+      "Node 3 (value = 3)",
+      "Node 4 (value = 4)",
+      "Node 5 (value = 5)",
+      "Node 7 (value = 7)"
+    ],
+    answer: 1,
+    explanation: "✓ Correct! For 7 nodes, slow lands on node 4. Steps: (1→2,1→3),(2→3,3→5),(3→4,5→7)→fast.next=NULL → slow=4.",
+    points: 200
+  }
+];
+
+/* ════════════════════════════════════════════════
+   GAME STATE
+════════════════════════════════════════════════ */
+const TOTAL_PUZZLES = 3;
+const GAME_TIME = 120; // 2 minutes in seconds
+let totalScore    = 0;
+let solvedCount   = 0;
+let puzzleActive  = false;
+let nearNode      = -1;
+let gameTimeLeft  = GAME_TIME;
+let gameRunning   = false;
+let timerInterval = null;
+const nodeSolved  = [false, false, false];
+let nextBtnAction = null;
+
+// NODE_ZONES updated to match new A-Frame entity positions
+const NODE_ZONES = [
+  { x: -3,    z: -1    },  // Puzzle 1 — unchanged
+  { x:  3.89, z:  4.57 },  // Puzzle 2 — moved to X=3.89, Z=4.57
+  { x: -8.10, z:  6.94 }   // Puzzle 3 — moved to X=-8.10, Z=6.94
+];
+const NODE_DIST = 2.0;
+
+/* ════════════════════════════════════════════════
+   START
+════════════════════════════════════════════════ */
+function startGame() {
+  document.getElementById('intro').classList.add('fade-out');
+  const sceneEl = document.getElementById('scene');
+  sceneEl.style.display = '';
+  setTimeout(() => document.getElementById('intro').style.display = 'none', 800);
+
+  const overlay = document.getElementById('room-transition');
+  overlay.classList.add('active');
+  setTimeout(() => overlay.classList.remove('active'), 2200);
+
+  const doLoad = () => { startProximityLoop(); };
+  if (sceneEl.hasLoaded) doLoad();
+  else sceneEl.addEventListener('loaded', doLoad, { once: true });
+
+  document.getElementById('room-name-badge').textContent    = '🔗 LINKED LIST DUNGEON';
+  document.getElementById('puzzle-count-badge').textContent = `NODES: 0/${TOTAL_PUZZLES}`;
+  
+  // Start the timer
+  startTimer();
+}
+
+/* ════════════════════════════════════════════════
+   TIMER FUNCTIONS
+════════════════════════════════════════════════ */
+function startTimer() {
+  gameRunning = true;
+  gameTimeLeft = GAME_TIME;
+  updateTimerDisplay();
+  timerInterval = setInterval(() => {
+    gameTimeLeft--;
+    updateTimerDisplay();
+    
+    if (gameTimeLeft <= 0) {
+      endGameTimeout();
+    }
+  }, 1000);
+}
+
+function updateTimerDisplay() {
+  const mins = Math.floor(gameTimeLeft / 60);
+  const secs = gameTimeLeft % 60;
+  const display = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  const badge = document.getElementById('timer-badge');
+  if (badge) {
+    badge.textContent = `TIME: ${display}`;
+    // Warning color at 30 seconds
+    if (gameTimeLeft <= 30) badge.style.color = '#ff4444';
+    else badge.style.color = '#ffb3b3';
+  }
+}
+
+function stopTimer() {
+  gameRunning = false;
+  if (timerInterval) clearInterval(timerInterval);
+}
+
+function endGameTimeout() {
+  stopTimer();
+  puzzleActive = true; // Prevent further interaction
+  closePuzzle();
+  
+  document.getElementById('timeout-score').textContent = `SCORE BEFORE TIMEOUT: ${totalScore} PTS`;
+  document.getElementById('did-not-escape').classList.add('open');
+}
+
+/* ════════════════════════════════════════════════
+   KEYBOARD
+════════════════════════════════════════════════ */
+window.addEventListener('keydown', (e) => {
+  if (puzzleActive) return;
+  if (e.key === 'e' || e.key === 'E') {
+    if (nearNode >= 0 && !nodeSolved[nearNode]) {
+      openNodePuzzle(nearNode);
+    }
+  }
+});
+
+/* ════════════════════════════════════════════════
+   PLAYER POSITION
+════════════════════════════════════════════════ */
+function getPlayerPos() {
+  const cam = document.querySelector('a-camera');
+  if (cam && cam.object3D) {
+    const wp = new THREE.Vector3();
+    cam.object3D.getWorldPosition(wp);
+    return wp;
+  }
+  const rig = document.getElementById('rig');
+  return rig && rig.object3D ? rig.object3D.position : null;
+}
+
+/* ════════════════════════════════════════════════
+   PROXIMITY LOOP
+════════════════════════════════════════════════ */
+function startProximityLoop() {
+  setInterval(() => {
+    if (puzzleActive) return;
+    const p = getPlayerPos();
+    if (!p) return;
+
+    console.log(`Position: X=${p.x.toFixed(2)}, Y=${p.y.toFixed(2)}, Z=${p.z.toFixed(2)}`);
+
+    let foundIdx = -1;
+    NODE_ZONES.forEach((nz, i) => {
+      const hint = document.getElementById(`node-hint-${i}`);
+      if (nodeSolved[i]) {
+        if (hint) hint.setAttribute('visible', false);
+        return;
+      }
+      const dist = Math.hypot(p.x - nz.x, p.z - nz.z);
+      if (dist < NODE_DIST) {
+        foundIdx = i;
+        if (hint) hint.setAttribute('visible', true);
+      } else {
+        if (hint) hint.setAttribute('visible', false);
+      }
+    });
+
+    if (foundIdx !== nearNode) {
+      nearNode = foundIdx;
+      if (foundIdx >= 0 && !nodeSolved[foundIdx]) {
+        const labels = ['1: Reverse a List', '2: Circular Link', '3: Find Middle — ESCAPE!'];
+        showToast(`Near Node ${foundIdx + 1} — Press [E] for Puzzle ${labels[foundIdx]}`);
+      } else {
+        hideToast();
+      }
+    }
+  }, 150);
+}
+
+/* ════════════════════════════════════════════════
+   OPEN PUZZLE
+════════════════════════════════════════════════ */
+function openNodePuzzle(idx) {
+  const puzzle = LINKED_PUZZLES[idx];
+  puzzleActive = true;
+  hideToast();
+
+  populateModal(puzzle, `node_puzzle_${idx + 1}`);
+  document.querySelectorAll('.option-btn').forEach((btn, i) => {
+    btn.onclick = () => checkAnswer(i, idx, btn);
+  });
+  document.getElementById('puzzle-modal').classList.add('open');
+  document.getElementById('screen-content').scrollTop = 0;
+}
+
+/* ════════════════════════════════════════════════
+   CHECK ANSWER
+════════════════════════════════════════════════ */
+function checkAnswer(chosen, nodeIdx, btnEl) {
+  if (!puzzleActive) return;
+  const puzzle = LINKED_PUZZLES[nodeIdx];
+  document.querySelectorAll('.option-btn').forEach(b => b.style.pointerEvents = 'none');
+  const feedback = document.getElementById('puzzle-feedback');
+
+  if (chosen === puzzle.answer) {
+    btnEl.classList.add('correct');
+    feedback.className = 'success';
+    feedback.textContent = puzzle.explanation;
+    feedback.style.display = 'block';
+
+    totalScore += puzzle.points;
+    document.getElementById('score-badge').textContent = `SCORE: ${totalScore}`;
+    showScorePopup(`+${puzzle.points} PTS ✓`);
+
+    nodeSolved[nodeIdx] = true;
+    solvedCount++;
+
+    const zone = document.getElementById(`node-zone-${nodeIdx}`);
+    if (zone) {
+      const box = zone.querySelector('a-box');
+      if (box) { box.setAttribute('color', '#226644'); box.setAttribute('opacity', '0.3'); }
+    }
+
+    updateProgress();
+    puzzleActive = false;
+
+    setTimeout(() => {
+      const btn = document.getElementById('next-puzzle-btn');
+      const isLast = solvedCount >= TOTAL_PUZZLES;
+      btn.textContent = isLast ? '🏆 ESCAPE!' : 'CLOSE ✓';
+      nextBtnAction = () => {
+        closePuzzle();
+        if (isLast) setTimeout(showVictory, 600);
+      };
+      btn.style.display = 'block';
+    }, 1000);
+
+  } else {
+    btnEl.classList.add('wrong');
+    feedback.className = 'fail';
+    feedback.textContent = `✗ Incorrect. Try again!`;
+    feedback.style.display = 'block';
+    puzzleActive = false;
+
+    setTimeout(() => {
+      const btn = document.getElementById('next-puzzle-btn');
+      btn.textContent = 'TRY AGAIN';
+      nextBtnAction = closePuzzle;
+      btn.style.display = 'block';
+    }, 800);
+  }
+}
+
+function handleNextBtn() {
+  if (nextBtnAction) nextBtnAction();
+}
+
+/* ════════════════════════════════════════════════
+   PROGRESS COUNTER
+════════════════════════════════════════════════ */
+function updateProgress() {
+  for (let i = 0; i < TOTAL_PUZZLES; i++) {
+    const pip = document.getElementById(`pip-${i}`);
+    if (pip) pip.classList.toggle('filled', i < solvedCount);
+  }
+  document.getElementById('counter-text').textContent = `${solvedCount} / ${TOTAL_PUZZLES}`;
+  document.getElementById('puzzle-count-badge').textContent = `NODES: ${solvedCount}/${TOTAL_PUZZLES}`;
+}
+
+/* ════════════════════════════════════════════════
+   VICTORY
+════════════════════════════════════════════════ */
+function showVictory() {
+  stopTimer();
+  document.getElementById('final-score').textContent = `FINAL SCORE: ${totalScore} PTS`;
+  document.getElementById('victory').classList.add('open');
+}
+
+function goToLevels() {
+  document.body.style.transition = 'opacity .6s';
+  document.body.style.opacity = '0';
+  setTimeout(() => { window.location.href = '/level'; }, 650);
+}
+
+/* ════════════════════════════════════════════════
+   MODAL RENDERER
+════════════════════════════════════════════════ */
+function populateModal(puzzle, filename) {
+  document.getElementById('titlebar-filename').textContent  = filename;
+  document.getElementById('puzzle-tag').textContent         = puzzle.tag;
+  document.getElementById('puzzle-title').textContent       = puzzle.title;
+  const cls = { EASY:'diff-easy', MEDIUM:'diff-medium', HARD:'diff-hard' }[puzzle.difficulty];
+  document.getElementById('puzzle-difficulty').innerHTML    = `<span class="${cls}">◆ ${puzzle.difficulty}</span>`;
+  document.getElementById('puzzle-description').textContent = puzzle.description;
+  document.getElementById('puzzle-code-block').textContent  = puzzle.code;
+  document.getElementById('hint-text').style.display        = 'none';
+  document.getElementById('hint-text').textContent          = '💡 ' + puzzle.hint;
+  document.getElementById('puzzle-feedback').className      = '';
+  document.getElementById('puzzle-feedback').style.display  = 'none';
+  document.getElementById('next-puzzle-btn').style.display  = 'none';
+  nextBtnAction = null;
+  const grid = document.getElementById('options-grid');
+  grid.innerHTML = '';
+  puzzle.options.forEach((opt, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'option-btn';
+    btn.textContent = `${['A','B','C','D'][i]}.  ${opt}`;
+    grid.appendChild(btn);
+  });
+}
+
+/* ════════════════════════════════════════════════
+   HELPERS
+════════════════════════════════════════════════ */
+function closePuzzle() {
+  document.getElementById('puzzle-modal').classList.remove('open');
+  document.getElementById('did-not-escape').classList.remove('open');
+  puzzleActive = false;
+}
+
+function showHint() {
+  document.getElementById('hint-text').style.display = 'block';
+}
+
+function showScorePopup(msg) {
+  const p = document.getElementById('score-popup');
+  p.textContent = msg; p.style.display = 'block';
+  setTimeout(() => p.style.display = 'none', 2000);
+}
+
+function showToast(msg) {
+  let t = document.getElementById('proximity-toast');
+  if (!t) {
+    t = document.createElement('div'); t.id = 'proximity-toast';
+    t.style.cssText = `position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#1a0000;border:1px solid #ff6b6b88;color:#ff9999;font-family:'Share Tech Mono',monospace;font-size:0.85rem;letter-spacing:2px;padding:12px 28px;border-radius:3px;z-index:150;pointer-events:none;`;
+    document.body.appendChild(t);
+  }
+  t.textContent = msg; t.style.display = 'block';
+}
+
+function hideToast() {
+  const t = document.getElementById('proximity-toast');
+  if (t) t.style.display = 'none';
+}
+</script>
+</body>
+</html>
