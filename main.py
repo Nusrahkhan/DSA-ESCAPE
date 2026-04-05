@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.responses import FileResponse, RedirectResponse
+from mangum import Mangum
 
 app = FastAPI()
 
@@ -46,3 +47,5 @@ async def graphs():
 @app.get("/go-to-level")
 async def go_to_level():
     return RedirectResponse(url="/level")
+
+handler = Mangum(app)
