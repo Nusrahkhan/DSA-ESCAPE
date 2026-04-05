@@ -904,7 +904,7 @@
   const progressText = document.getElementById('progress-text');
 
   loader.load(
-    '/static/egyptian_temple.glb',
+    'https://zvfvmvpkgkwzuyiy.private.blob.vercel-storage.com/egyptian_temple.glb',
     (gltf) => {
       const model = gltf.scene;
       model.traverse(node => {
@@ -936,7 +936,7 @@
       const fireLoader = new THREE.GLTFLoader();
       fireLoader.setDRACOLoader(dracoLoader);
       fireLoader.load(
-        '/static/fire.glb',
+        'https://zvfvmvpkgkwzuyiy.private.blob.vercel-storage.com/fire.glb',
         (fireGltf) => {
           const fireModel = fireGltf.scene;
 
